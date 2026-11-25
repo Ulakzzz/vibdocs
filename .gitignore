@@ -12,6 +12,7 @@ dist
 
 # Documentos internos (requisitos, levantamentos): ficam só na máquina / SharePoint
 docs/
+VibDocs-*.md
 
 # Nunca versionar dados de cliente
 *.xlsx
