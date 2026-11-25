@@ -22,13 +22,15 @@ body {
 }
 
 .pagina {
+  box-sizing: border-box;
   width: 210mm;
   min-height: 297mm;
-  padding: 12mm 14mm;
+  padding: 12mm 14mm 12mm 12mm;
   background: #fff;
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.15);
   font-family: Arial, Helvetica, sans-serif;
   border-left: 6mm solid #000;
+  flex: none;
 }
 
 .pg-cab {
@@ -39,34 +41,86 @@ body {
   padding-bottom: 4px;
 }
 
+.caixa {
+  margin-top: 3mm;
+  min-height: 32mm;
+  border: 1px solid #000;
+  padding: 2mm 3mm;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.caixa p {
+  margin-top: 1.5mm;
+  text-align: justify;
+}
+
+.grade-imagens {
+  margin-top: 3mm;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2mm;
+}
+
+.slot {
+  display: flex;
+  gap: 2mm;
+  border: 1px solid #000;
+  padding: 1mm;
+  overflow: hidden;
+  min-width: 0;
+}
+.slot-vazio {
+  border-style: dashed;
+  border-color: #bbb;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #aaa;
+}
+
+/* Bloco usado só na impressão: fora do layout de painéis da tela. */
+.so-impressao {
+  display: none;
+}
+
 @page {
   size: A4;
   margin: 0;
 }
 
 @media print {
-  body {
+  html,
+  body,
+  #root {
+    height: auto;
     background: #fff;
   }
-  /* Na impressão só a prévia aparece. */
-  .no-print {
+  .tela {
     display: none !important;
   }
-  .print-root,
-  .print-root * {
-    overflow: visible !important;
-    height: auto !important;
+  .so-impressao {
+    display: block;
   }
   .previa {
+    display: block;
     padding: 0;
-    gap: 0;
   }
   .pagina {
+    width: 210mm;
+    min-height: 296mm; /* 1 mm de folga evita página em branco por arredondamento */
+    margin: 0;
     box-shadow: none;
     break-after: page;
-    min-height: 297mm;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
   .pagina:last-child {
     break-after: auto;
+  }
+  .slot-vazio {
+    border: none;
+  }
+  .slot-vazio .no-print-texto {
+    display: none;
   }
 }

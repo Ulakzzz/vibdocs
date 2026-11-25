@@ -1,6 +1,17 @@
-// Prévia do relatório em páginas A4. O mesmo HTML é usado para imprimir/gerar o PDF.
+// Prévia do relatório em páginas A4. O MESMO componente é usado na tela e na impressão/PDF.
+import { useEffect, useState } from 'react'
 import { CONDICOES, severidade } from '../lib/condicao'
-import { dataPorExtenso, type Relatorio } from '../lib/relatorio'
+import { urlImagem } from '../lib/imagens'
+import {
+  anomaliaDe,
+  dataPorExtenso,
+  equipamentosAnomalia,
+  equipamentosQuadro,
+  juntar,
+  type ImagemRef,
+  type Relatorio,
+  type Slot,
+} from '../lib/relatorio'
 
 function Cabecalho() {
   return (
@@ -24,7 +35,44 @@ function Celula({ c }: { c: string }) {
   )
 }
 
+function Imagem({ img }: { img: ImagemRef }) {
+  const [url, setUrl] = useState<string>()
+  useEffect(() => {
+    urlImagem(img.id).then(setUrl)
+  }, [img.id])
+  if (!url) return <div className="flex h-full w-full items-center justify-center text-[9px] text-gray-400">carregando…</div>
+  return (
+    <img
+      src={url}
+      alt={img.nome}
+      className="h-full w-full"
+      style={{ objectFit: img.ajuste === 'preencher' ? 'cover' : 'contain' }}
+    />
+  )
+}
+
+function Espaco({ slot, imagens, rotulo, classe }: { slot: Slot; imagens: ImagemRef[]; rotulo: string; classe: string }) {
+  const dela = imagens.filter((i) => i.slot === slot)
+  return (
+    <div className={`slot ${classe} ${dela.length ? '' : 'slot-vazio'}`}>
+      {dela.length ? (
+        dela.map((i) => (
+          <div key={i.id} className="min-h-0 min-w-0 flex-1">
+            <Imagem img={i} />
+          </div>
+        ))
+      ) : (
+        <span className="no-print-texto">{rotulo}</span>
+      )}
+    </div>
+  )
+}
+
 export function Previa({ r }: { r: Relatorio }) {
+  const quadro = equipamentosQuadro(r)
+  const anomalias = equipamentosAnomalia(r)
+  const mesTitulo = r.mesReferencia.split('-').reverse().join('/')
+
   return (
     <div className="previa">
       {/* Página de rosto */}
@@ -37,7 +85,8 @@ export function Previa({ r }: { r: Relatorio }) {
             {r.areaTitulo ? ` – ${r.areaTitulo}` : ''}
           </div>
           <div className="mt-40 text-sm">
-            {r.cidade}, {dataPorExtenso(r.dataExpedicao)}
+            {r.cidade ? `${r.cidade}, ` : ''}
+            {dataPorExtenso(r.dataExpedicao)}
           </div>
         </div>
       </section>
@@ -46,37 +95,49 @@ export function Previa({ r }: { r: Relatorio }) {
       <section className="pagina">
         <Cabecalho />
         <h2 className="mt-4 mb-2 text-sm font-bold">1. Condição dos equipamentos da rota</h2>
-        <table className="w-full border-collapse text-[9px]">
-          <thead>
-            <tr className="bg-[#002060] text-white">
-              <th className="border border-black px-1">Local de instalação</th>
-              <th className="border border-black px-1">Descrição</th>
-              <th className="border border-black px-1">{r.mesReferencia.split('-').reverse().join('/')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {r.equipamentos.map((e) => (
-              <tr key={e.local}>
-                <td className="border border-black px-1">{e.local}</td>
-                <td className="border border-black px-1">{e.descricao}</td>
-                <Celula c={e.condicao} />
+        {quadro.length ? (
+          <table className="w-full border-collapse text-[9px]">
+            <thead>
+              <tr className="bg-[#002060] text-white">
+                <th className="border border-black px-1">Local de instalação</th>
+                <th className="border border-black px-1">Descrição</th>
+                <th className="w-14 border border-black px-1">{mesTitulo}</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {quadro.map((e) => (
+                <tr key={e.local}>
+                  <td className="border border-black px-1">{e.local}</td>
+                  <td className="border border-black px-1">{e.descricao}</td>
+                  <Celula c={e.condicao} />
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="text-[10px] text-gray-500">Nenhum equipamento com as condições selecionadas.</p>
+        )}
         <h2 className="mt-6 mb-1 text-sm font-bold">Equipe técnica</h2>
         <p className="text-[10px]">
           Técnico responsável pela coleta de dados: {r.equipe.coleta || '—'}
           <br />
           Técnico responsável pela análise de dados: {r.equipe.analise || '—'}
         </p>
+        {anomalias.length > 0 && (
+          <>
+            <h2 className="mt-6 mb-1 text-sm font-bold">Anomalias registradas</h2>
+            <p className="text-[10px]">A seguir as anomalias detectadas nos equipamentos monitorados.</p>
+          </>
+        )}
       </section>
 
-      {/* Páginas de anomalia */}
-      {r.anomalias.map((a) => {
-        const sev = severidade(a.condicao)
+      {/* Uma página por anomalia */}
+      {anomalias.map((e) => {
+        const a = anomaliaDe(r, e)
+        const sev = severidade(e.condicao)
+        const cor = (s: string) => (s === 'Alarme' ? '#ff0000' : s === 'Alerta' ? '#ffc000' : '#ffff00')
         return (
-          <section className="pagina" key={a.local}>
+          <section className="pagina" key={e.local} data-local={e.local}>
             <div className="flex items-end justify-between border-b-2 border-black pb-1">
               <div className="text-lg font-bold text-red-600">Relatório de Análise de Vibração</div>
               <div className="text-[10px] font-bold">Anomalia pendente</div>
@@ -84,44 +145,43 @@ export function Previa({ r }: { r: Relatorio }) {
             <div className="mt-2 flex justify-between text-[11px] font-bold">
               <div className="space-y-0.5">
                 <div>Localização: {r.areaTitulo || r.sigla}</div>
-                <div>Equipamento: {a.equipamento}</div>
-                <div>Local de instalação: {a.local}</div>
-                <div>Data: {a.dataMedicao}</div>
+                <div>Equipamento: {a.equipamento || e.descricao}</div>
+                <div>Local de instalação: {e.local}</div>
+                <div>Data: {a.dataMedicao || '—'}</div>
                 <div>Reincidente desde: {a.reincidenteDesde || '—'}</div>
                 <div>Notas PR: {a.notasPR || '—'}</div>
               </div>
-              <table className="text-[10px]">
+              <table className="h-fit text-[10px]">
                 <tbody>
                   {(['Alarme', 'Alerta', 'Pré-alerta'] as const).map((s) => (
                     <tr key={s}>
-                      <td
-                        className="h-5 w-6 border border-black"
-                        style={{ background: sev === s ? (s === 'Alarme' ? '#ff0000' : s === 'Alerta' ? '#ffc000' : '#ffff00') : '#fff' }}
-                      />
+                      <td className="h-5 w-6 border border-black" style={{ background: sev === s ? cor(s) : '#fff' }} />
                       <td className="pl-1">{s}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <div className="mt-3 min-h-28 border border-black p-2 text-[11px] whitespace-pre-wrap">
+            <div className="caixa">
               <b>Situação:</b>
-              <br />
-              {a.situacao}
+              {a.eixos.map((x) => (
+                <p key={x.id}>
+                  <b>{x.nome}:</b> {juntar(x.situacaoPadrao, x.situacaoTecnico)}
+                </p>
+              ))}
             </div>
-            <div className="mt-3 min-h-28 border border-black p-2 text-[11px] whitespace-pre-wrap">
+            <div className="caixa">
               <b>Recomendação:</b>
-              <br />
-              {a.recomendacao}
+              {a.eixos.map((x) => (
+                <p key={x.id}>
+                  <b>{x.nome}:</b> {juntar(x.recomendacaoPadrao, x.recomendacaoTecnico)}
+                </p>
+              ))}
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              <div className="col-span-3 flex h-36 items-center justify-center border border-dashed text-[10px] text-gray-400">
-                tendência (imagem)
-              </div>
-              <div className="col-span-2 flex h-36 items-center justify-center border border-dashed text-[10px] text-gray-400">
-                espectro / envelope (imagem)
-              </div>
-              <div className="flex h-36 items-center justify-center border border-dashed text-[10px] text-gray-400">foto</div>
+            <div className="grade-imagens">
+              <Espaco slot="tendencia" imagens={a.imagens} rotulo="tendência" classe="col-span-3 h-[58mm]" />
+              <Espaco slot="espectro" imagens={a.imagens} rotulo="espectro / envelope" classe="col-span-2 h-[62mm]" />
+              <Espaco slot="foto" imagens={a.imagens} rotulo="foto" classe="h-[62mm]" />
             </div>
           </section>
         )
