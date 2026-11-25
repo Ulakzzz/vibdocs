@@ -21,7 +21,9 @@ import {
 } from 'docx'
 import { CONDICOES, severidade } from './condicao'
 import { blobImagem } from './imagens'
+import { ALTURA as ALTURA_GRAFICO, LARGURA as LARGURA_GRAFICO, graficosDoRelatorio, svgParaPng } from '../report/graficos'
 import { mesCurto } from './historico'
+import { calcularIndicadores } from './indicadores'
 import {
   anomaliaDe,
   colunasQuadro,
@@ -332,6 +334,28 @@ export async function gerarWord(r: Relatorio): Promise<Blob> {
       p('A seguir as anomalias detectadas nos equipamentos monitorados.'),
     )
 
+  // Indicadores: os mesmos gráficos SVG da prévia, convertidos em PNG
+  const indicadores: (Paragraph | Table)[] = []
+  if (r.incluirIndicadores !== false) {
+    const g = graficosDoRelatorio(calcularIndicadores(r))
+    const largura = Math.floor(UTIL * TWIP_PX)
+    const altura = Math.round((largura * ALTURA_GRAFICO) / LARGURA_GRAFICO)
+    const blocos: [string, string][] = [
+      ['2. Índice de execução', g.execucao],
+      ['3. Indicadores de anomalias', g.anomalias],
+      ['4. Dados operacionais', g.reincidencia],
+    ]
+    for (const [k, [titulo, svg]] of blocos.entries()) {
+      indicadores.push(
+        p([t(titulo, { bold: true, size: 24 })], { quebra: k === 0, antes: k === 0 ? 0 : 240, depois: 120 }),
+        new Paragraph({
+          children: [new ImageRun({ type: 'png', data: await svgParaPng(svg), transformation: { width: largura, height: altura }, altText: { name: titulo, description: titulo, title: titulo } })],
+          spacing: { after: 0 },
+        }),
+      )
+    }
+  }
+
   const paginas: (Paragraph | Table)[] = []
   for (const e of anomalias) {
     paginas.push(p('', { quebra: true, depois: 0 }), ...(await paginaAnomalia(r, e.local)))
@@ -356,7 +380,7 @@ export async function gerarWord(r: Relatorio): Promise<Blob> {
         },
         headers: { default: cabecalho() },
         footers: { default: rodape(r) },
-        children: [...capa, ...condicao, ...paginas],
+        children: [...capa, ...condicao, ...indicadores, ...paginas],
       },
     ],
   })

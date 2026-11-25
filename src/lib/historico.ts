@@ -9,8 +9,11 @@ export type Historico = Record<string, Record<string, string>>
 export interface FonteHistorico {
   mesRef: string // AAAA-MM
   nome: string
-  linhas: { local: string; condicao: string }[]
+  linhas: { local: string; condicao: string; executado?: boolean }[]
 }
+
+/** ordem executada (true/false) por mês de cada Local de instalação; só meses em que estava planejada */
+export type Execucao = Record<string, Record<string, boolean>>
 
 const MESES_PT = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 const MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
@@ -42,6 +45,17 @@ export function montarHistorico(fontes: FonteHistorico[]): Historico {
   return h
 }
 
+/** Ordens planejadas e executadas por mês. "X" (não previsto no mês) não conta como planejada. */
+export function montarExecucao(fontes: FonteHistorico[]): Execucao {
+  const e: Execucao = {}
+  for (const f of fontes)
+    for (const l of f.linhas) {
+      if (l.condicao === 'X' || l.executado === undefined) continue
+      ;(e[l.local] ??= {})[f.mesRef] = l.executado
+    }
+  return e
+}
+
 // ---------- leitura das planilhas da pasta, com cache no navegador ----------
 interface Cache {
   chave: string
@@ -52,7 +66,7 @@ export async function carregarHistoricoPasta(
   raiz: FileSystemDirectoryHandle,
   usina: Usina,
   progresso?: (feito: number, total: number) => void,
-): Promise<{ historico: Historico; meses: string[]; falhas: string[] }> {
+): Promise<{ historico: Historico; execucao: Execucao; meses: string[]; falhas: string[] }> {
   const planilhas = await listarPlanilhas(raiz, usina)
   const fontes: FonteHistorico[] = []
   const falhas: string[] = []
@@ -62,11 +76,15 @@ export async function carregarHistoricoPasta(
     try {
       const arq = await p.arquivo.getFile()
       const chave = `${usina}/${p.mesRef}/${arq.name}/${arq.lastModified}/${arq.size}`
-      const ck = `vibdocs.hist.${usina}.${p.mesRef}`
+      const ck = `vibdocs.hist2.${usina}.${p.mesRef}` // hist2: inclui a execução das ordens
       const emCache = await get<Cache>(ck)
       if (emCache?.chave === chave) fontes.push(emCache.fonte)
       else {
-        const linhas = lerXlsxVibracao(await arq.arrayBuffer(), arq.name).map((l) => ({ local: l.local, condicao: l.condicao }))
+        const linhas = lerXlsxVibracao(await arq.arrayBuffer(), arq.name).map((l) => ({
+          local: l.local,
+          condicao: l.condicao,
+          executado: l.executado,
+        }))
         const fonte = { mesRef: p.mesRef, nome: arq.name, linhas }
         await set(ck, { chave, fonte } satisfies Cache)
         fontes.push(fonte)
@@ -77,7 +95,7 @@ export async function carregarHistoricoPasta(
     feito++
   }
   progresso?.(feito, planilhas.length)
-  return { historico: montarHistorico(fontes), meses: fontes.map((f) => f.mesRef).sort(), falhas }
+  return { historico: montarHistorico(fontes), execucao: montarExecucao(fontes), meses: fontes.map((f) => f.mesRef).sort(), falhas }
 }
 
 // ---------- regras ----------

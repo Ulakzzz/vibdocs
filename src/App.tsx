@@ -24,7 +24,7 @@ import {
   type LinhaControle,
 } from './lib/controle'
 import { historicoDemo, linhasDemo } from './lib/demo'
-import { carregarHistoricoPasta, mesDoNome, montarHistorico, type FonteHistorico, type Historico } from './lib/historico'
+import { carregarHistoricoPasta, mesDoNome, montarExecucao, montarHistorico, type Execucao, type FonteHistorico, type Historico } from './lib/historico'
 import { escolherPasta, esquecerPasta, navegadorSuportado, pastaLembrada, reconectar } from './lib/pasta'
 import { lerDaPasta, lerLocal, maisRecente, proximaSequencia, salvarEmitido, salvarLocal, salvarNaPasta } from './lib/rascunho'
 import { aplicarHistorico, equipamentosAnomalia, hojeISO, mesmoHistorico, normalizar, novoRelatorio, type Relatorio } from './lib/relatorio'
@@ -65,7 +65,7 @@ export default function App() {
   const [linhas, setLinhas] = useState<LinhaControle[]>([])
   const [mesManual, setMesManual] = useState<string>() // AAAA-MM do modo manual/demonstração
   // ---------- histórico ----------
-  const [hist, setHist] = useState<{ historico: Historico; fonte: string }>()
+  const [hist, setHist] = useState<{ historico: Historico; execucao: Execucao; fonte: string }>()
   const [carregandoHist, setCarregandoHist] = useState('')
   const [sigla, setSigla] = useState('')
 
@@ -129,9 +129,9 @@ export default function App() {
     setHist(undefined)
     setCarregandoHist('lendo histórico…')
     carregarHistoricoPasta(raiz, usina as (typeof USINAS)[number], (f, t) => !cancelado && setCarregandoHist(`histórico ${f}/${t}`))
-      .then(({ historico, meses: ms, falhas }) => {
+      .then(({ historico, execucao, meses: ms, falhas }) => {
         if (cancelado) return
-        setHist({ historico, fonte: `${ms.length} planilhas de controle de ${usina}` })
+        setHist({ historico, execucao, fonte: `${ms.length} planilhas de controle de ${usina}` })
         setCarregandoHist(falhas.length ? `histórico: ${falhas.length} planilha(s) não lida(s)` : '')
         if (falhas.length) console.warn('Planilhas não lidas no histórico:', falhas)
       })
@@ -215,8 +215,8 @@ export default function App() {
   // Mantém a cópia do histórico do relatório em dia (só grava se mudou).
   useEffect(() => {
     if (!rel || !hist) return
-    const novo = aplicarHistorico(rel, hist.historico, hist.fonte)
-    if (mesmoHistorico(novo.historico?.condicoes, rel.historico?.condicoes)) return
+    const novo = aplicarHistorico(rel, hist.historico, hist.execucao, hist.fonte)
+    if (mesmoHistorico(novo.historico, rel.historico)) return
     sujo.current = true
     setRel(novo)
   }, [rel, hist])
@@ -234,6 +234,10 @@ export default function App() {
       if (!r) {
         const seq = raiz ? await proximaSequencia(raiz, usina, mesRef) : 1
         r = novoRelatorio({ usina, sigla, mesReferencia: mesRef, sequencia: seq, analista, linhas })
+      } else {
+        // Rascunho salvo antes de existir o campo "executado": completa pela planilha do mês.
+        const porLocal = new Map(linhas.map((l) => [l.local, l]))
+        r = { ...r, equipamentos: r.equipamentos.map((e) => (e.executado === undefined && porLocal.has(e.local) ? { ...e, executado: porLocal.get(e.local)!.executado } : e)) }
       }
       if (cancelado) return
       sujo.current = false
@@ -262,7 +266,7 @@ export default function App() {
     setSigla([...new Set(l.map((x) => siglaArea(x.local)))].sort()[0] ?? '')
     setFonteManual(nome)
     setMesManual(mes)
-    setHist(historico?.length ? { historico: montarHistorico(historico), fonte: nome } : undefined)
+    setHist(historico?.length ? { historico: montarHistorico(historico), execucao: montarExecucao(historico), fonte: nome } : undefined)
   }
 
   /** Modo manual: uma ou várias planilhas. A mais recente vira o mês do relatório; as outras, histórico. */

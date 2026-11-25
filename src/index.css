@@ -78,6 +78,12 @@ body {
   color: #aaa;
 }
 
+.grafico svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
 /* Bloco usado só na impressão: fora do layout de painéis da tela. */
 .so-impressao {
   display: none;

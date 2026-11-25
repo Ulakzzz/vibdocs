@@ -129,6 +129,15 @@ export function PainelRelatorio({ r, atualizar }: { r: Relatorio; atualizar: Atu
         </Campo>
       </div>
 
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={r.incluirIndicadores !== false}
+          onChange={(e) => set('incluirIndicadores', e.target.checked)}
+        />
+        Incluir página de indicadores (execução, anomalias e reincidência)
+      </label>
+
       <div className="rounded border border-zinc-200 bg-white p-2 text-xs">
         <b>Histórico: </b>
         {r.historico ? (

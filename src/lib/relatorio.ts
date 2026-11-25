@@ -1,7 +1,7 @@
 // Modelo do documento do relatório (um JSON por relatório) e regras automáticas.
 // Tudo que é automático pode ser editado depois pelo técnico.
 import { siglaArea, type LinhaControle } from './controle'
-import { mesCurto, mesesDoQuadro, reincidenteDesde, type Historico } from './historico'
+import { mesCurto, mesesDoQuadro, reincidenteDesde, type Execucao, type Historico } from './historico'
 
 export const USINAS_RELATORIO = ['Barreiro', 'Jeceaba', 'Mineração', 'Florestal'] as const
 
@@ -11,6 +11,7 @@ export interface EquipRel {
   condicao: string // condição usada no relatório (editável)
   condicaoPlanilha?: string // como veio da planilha de controle
   manual?: boolean // adicionado à mão (fora da planilha)
+  executado?: boolean // ordem executada no mês (coluna "Execução" da planilha)
 }
 
 export interface Eixo {
@@ -72,7 +73,9 @@ export interface Relatorio {
   /** Quantos meses o quadro de condição mostra (incluindo o do relatório). */
   mesesNoQuadro?: number
   /** Cópia do histórico só dos equipamentos deste relatório (meses anteriores ao de referência). */
-  historico?: { condicoes: Historico; fonte: string; atualizadoEm: string }
+  historico?: { condicoes: Historico; execucao?: Execucao; fonte: string; atualizadoEm: string }
+  /** Mostrar a página de indicadores (execução, anomalias, reincidência). */
+  incluirIndicadores?: boolean
 }
 
 export const TODAS_CONDICOES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', 'X', 'R']
@@ -146,7 +149,13 @@ export function novoRelatorio(p: {
   const agora = new Date().toISOString()
   const equipamentos: EquipRel[] = p.linhas
     .filter((l) => siglaArea(l.local) === p.sigla)
-    .map((l) => ({ local: l.local, descricao: l.descricao, condicao: l.condicao, condicaoPlanilha: l.condicao }))
+    .map((l) => ({
+      local: l.local,
+      descricao: l.descricao,
+      condicao: l.condicao,
+      condicaoPlanilha: l.condicao,
+      executado: l.executado,
+    }))
   return {
     versao: 2,
     avulso: !!p.avulso,
@@ -187,16 +196,22 @@ export const juntar = (...partes: string[]) => partes.map((p) => p.trim()).filte
 export const MESES_QUADRO_PADRAO = 3
 
 /** Guarda no relatório o histórico dos seus equipamentos (só meses anteriores ao de referência). */
-export function aplicarHistorico(r: Relatorio, h: Historico, fonte: string): Relatorio {
+export function aplicarHistorico(r: Relatorio, h: Historico, ex: Execucao, fonte: string): Relatorio {
+  const anteriores = <T,>(porMes: Record<string, T> | undefined) =>
+    Object.fromEntries(Object.entries(porMes ?? {}).filter(([m]) => m < r.mesReferencia))
   const condicoes: Historico = {}
+  const execucao: Execucao = {}
   for (const e of r.equipamentos) {
-    const porMes = Object.fromEntries(Object.entries(h[e.local] ?? {}).filter(([m]) => m < r.mesReferencia))
-    if (Object.keys(porMes).length) condicoes[e.local] = porMes
+    const c = anteriores(h[e.local])
+    if (Object.keys(c).length) condicoes[e.local] = c
+    const x = anteriores(ex[e.local])
+    if (Object.keys(x).length) execucao[e.local] = x
   }
-  return { ...r, historico: { condicoes, fonte, atualizadoEm: new Date().toISOString() } }
+  return { ...r, historico: { condicoes, execucao, fonte, atualizadoEm: new Date().toISOString() } }
 }
 
-export const mesmoHistorico = (a?: Historico, b?: Historico) => JSON.stringify(a ?? {}) === JSON.stringify(b ?? {})
+export const mesmoHistorico = (a?: Relatorio['historico'], b?: Relatorio['historico']) =>
+  JSON.stringify([a?.condicoes ?? {}, a?.execucao ?? {}]) === JSON.stringify([b?.condicoes ?? {}, b?.execucao ?? {}])
 
 /** Meses (colunas) do quadro de condição. */
 export const colunasQuadro = (r: Relatorio) =>

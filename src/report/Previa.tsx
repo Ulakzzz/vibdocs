@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { CONDICOES, severidade } from '../lib/condicao'
 import { urlImagem } from '../lib/imagens'
 import { mesCurto } from '../lib/historico'
+import { calcularIndicadores } from '../lib/indicadores'
+import { graficosDoRelatorio } from './graficos'
 import {
   anomaliaDe,
   colunasQuadro,
@@ -69,6 +71,25 @@ function Espaco({ slot, imagens, rotulo, classe }: { slot: Slot; imagens: Imagem
         <span className="no-print-texto">{rotulo}</span>
       )}
     </div>
+  )
+}
+
+function PaginaIndicadores({ r }: { r: Relatorio }) {
+  const g = graficosDoRelatorio(calcularIndicadores(r))
+  const bloco = (titulo: string, svg: string) => (
+    <>
+      <h2 className="mt-5 mb-2 text-sm font-bold">{titulo}</h2>
+      {/* SVG gerado pelo próprio VibDocs (textos escapados) */}
+      <div className="grafico" dangerouslySetInnerHTML={{ __html: svg }} />
+    </>
+  )
+  return (
+    <section className="pagina">
+      <Cabecalho />
+      {bloco('2. Índice de execução', g.execucao)}
+      {bloco('3. Indicadores de anomalias', g.anomalias)}
+      {bloco('4. Dados operacionais', g.reincidencia)}
+    </section>
   )
 }
 
@@ -140,6 +161,9 @@ export function Previa({ r }: { r: Relatorio }) {
           </>
         )}
       </section>
+
+      {/* Indicadores (seções 2 a 4 do modelo VMN) */}
+      {r.incluirIndicadores !== false && <PaginaIndicadores r={r} />}
 
       {/* Uma página por anomalia */}
       {anomalias.map((e) => {

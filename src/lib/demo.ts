@@ -36,6 +36,7 @@ export function historicoDemo(mesRef: string): FonteHistorico[] {
   return [8, 6, 4, 2].map((n, k) => ({
     mesRef: antes(n),
     nome: `demonstração ${antes(n)}`,
-    linhas: NOMES.map((_, i) => ({ local: tag(i), condicao: seq[i]?.[k] ?? '1' })),
+    // execução fictícia: uma ou duas ordens não executadas em alguns meses
+    linhas: NOMES.map((_, i) => ({ local: tag(i), condicao: seq[i]?.[k] ?? '1', executado: !((k === 1 && i === 10) || (k === 2 && (i === 10 || i === 11))) })),
   }))
 }
