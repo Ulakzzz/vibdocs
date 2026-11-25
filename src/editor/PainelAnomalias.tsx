@@ -17,7 +17,7 @@ import {
   type Slot,
 } from '../lib/relatorio'
 import { TEXTOS_PADRAO, textoPorId } from '../lib/textos'
-import { btn, btnMini, Campo, Texto, TextoLongo } from './campos'
+import { Abas, btn, btnMini, Campo, Texto, TextoLongo } from './campos'
 
 type Atualizar = (f: (r: Relatorio) => Relatorio) => void
 
@@ -37,7 +37,7 @@ export function PainelAnomalias({
 
   if (!lista.length)
     return (
-      <p className="p-4 text-sm text-zinc-500">
+      <p className="p-4 text-sm text-cinza">
         Nenhum equipamento gera página de anomalia. Ajuste as condições na aba "Relatório" ou a condição dos equipamentos.
       </p>
     )
@@ -49,21 +49,21 @@ export function PainelAnomalias({
 
   return (
     <div className="flex h-full min-h-0">
-      <nav className="w-44 shrink-0 overflow-auto border-r bg-zinc-50">
+      <nav className="w-52 shrink-0 overflow-auto border-r border-linha bg-nevoa/60 p-2">
         {lista.map((e) => {
           const k = CONDICOES[e.condicao]
           return (
             <button
               key={e.local}
               onClick={() => selecionar(e.local)}
-              className={`block w-full border-b px-2 py-1.5 text-left text-xs ${e.local === atual?.local ? 'bg-white font-semibold' : ''}`}
+              className={`anom-item ${e.local === atual?.local ? 'ativo' : ''}`}
             >
-              <span className="mr-1 inline-block w-4 rounded text-center" style={{ background: k?.cor, color: k?.texto }}>
+              <span className="chip mr-1.5" style={{ background: k?.cor, color: k?.texto }}>
                 {e.condicao}
               </span>
               {completo(e) ? '✓ ' : ''}
-              <span className="font-mono">{e.local}</span>
-              <span className="block truncate text-zinc-500">{e.descricao}</span>
+              <span className="tag">{e.local}</span>
+              <span className="mt-0.5 block truncate text-cinza">{e.descricao}</span>
             </button>
           )
         })}
@@ -80,16 +80,16 @@ function EditorAnomalia({ r, e, atualizar }: { r: Relatorio; e: EquipRel; atuali
   const mudarEixo = (id: string, f: (x: Eixo) => Eixo) => mudar((an) => ({ ...an, eixos: an.eixos.map((x) => (x.id === id ? f(x) : x)) }))
 
   return (
-    <div className="space-y-4 p-3">
+    <div className="space-y-6 p-5">
       <div>
-        <div className="font-mono text-sm font-semibold">{e.local}</div>
-        <div className="text-xs text-zinc-500">
+        <div className="titulo text-lg">{e.local}</div>
+        <div className="text-xs text-cinza">
           Condição {e.condicao} – {CONDICOES[e.condicao]?.nome}
         </div>
         <LinhaDoTempo r={r} e={e} />
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-3">
         <Campo rotulo="Equipamento (como aparece no relatório)">
           <Texto valor={a.equipamento} mudar={(v) => mudar((an) => ({ ...an, equipamento: v }))} />
         </Campo>
@@ -119,25 +119,25 @@ function EditorAnomalia({ r, e, atualizar }: { r: Relatorio; e: EquipRel; atuali
 
       <section>
         <div className="mb-1 flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Situação e recomendação por eixo</h3>
+          <h3 className="titulo text-base">Situação e recomendação por eixo</h3>
           <button className={btnMini} onClick={() => mudar((an) => ({ ...an, eixos: [...an.eixos, novoEixo(an.eixos.length + 1)] }))}>
             + eixo
           </button>
         </div>
-        <p className="mb-2 text-[11px] text-zinc-500">
+        <p className="mb-2 text-[11px] text-cinza">
           Escolha a falha para trazer o texto padrão (provisório até a base oficial) e complete com suas próprias observações.
         </p>
         <div className="space-y-3">
           {a.eixos.map((x, i) => (
-            <div key={x.id} className="rounded border border-zinc-200 p-2">
+            <div key={x.id} className="eixo rounded-[14px] border border-linha p-4">
               <div className="mb-2 flex items-center gap-2">
                 <input
-                  className="w-28 rounded border px-2 py-1 text-sm font-semibold"
+                  className="campo titulo w-32 text-sm"
                   value={x.nome}
                   onChange={(ev) => mudarEixo(x.id, (y) => ({ ...y, nome: ev.target.value }))}
                 />
                 <select
-                  className="min-w-0 flex-1 rounded border px-2 py-1 text-sm"
+                  className="campo min-w-0 flex-1"
                   value={x.falha}
                   onChange={(ev) => {
                     const t = textoPorId(ev.target.value)
@@ -179,7 +179,7 @@ function EditorAnomalia({ r, e, atualizar }: { r: Relatorio; e: EquipRel; atuali
                   ✕
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 <Campo rotulo="Situação – texto padrão (editável)">
                   <TextoLongo valor={x.situacaoPadrao} mudar={(v) => mudarEixo(x.id, (y) => ({ ...y, situacaoPadrao: v }))} />
                 </Campo>
@@ -206,7 +206,12 @@ function EditorAnomalia({ r, e, atualizar }: { r: Relatorio; e: EquipRel; atuali
         </div>
       </section>
 
-      <Imagens imagens={a.imagens} mudar={(imgs) => mudar((an) => ({ ...an, imagens: imgs }))} />
+      <Imagens
+        imagens={a.imagens}
+        mudar={(imgs) => mudar((an) => ({ ...an, imagens: imgs }))}
+        layout={a.layoutImagens ?? 'padrao'}
+        mudarLayout={(l) => mudar((an) => ({ ...an, layoutImagens: l }))}
+      />
     </div>
   )
 }
@@ -224,10 +229,10 @@ function LinhaDoTempo({ r, e }: { r: Relatorio; e: EquipRel }) {
         const k = CONDICOES[c] ?? CONDICOES.X
         return (
           <div key={m} className="text-center">
-            <div className="h-5 w-9 rounded text-xs leading-5" style={{ background: k.cor, color: k.texto }} title={k.nome}>
+            <div className="chip h-6 w-10" style={{ background: k.cor, color: k.texto }} title={k.nome}>
               {c}
             </div>
-            <div className={`text-[10px] ${m === r.mesReferencia ? 'font-bold' : 'text-zinc-500'}`}>{mesCurto(m)}</div>
+            <div className={`text-[10px] ${m === r.mesReferencia ? 'font-bold' : 'text-cinza'}`}>{mesCurto(m)}</div>
           </div>
         )
       })}
@@ -240,10 +245,20 @@ function Miniatura({ id }: { id: string }) {
   useEffect(() => {
     urlImagem(id).then(setUrl)
   }, [id])
-  return url ? <img src={url} alt="" className="h-14 w-20 rounded border object-contain" /> : <div className="h-14 w-20 rounded border bg-zinc-100" />
+  return url ? <img src={url} alt="" className="h-14 w-20 rounded-lg border border-linha bg-white object-contain" /> : <div className="h-14 w-20 rounded-lg bg-nevoa" />
 }
 
-function Imagens({ imagens, mudar }: { imagens: ImagemRef[]; mudar: (i: ImagemRef[]) => void }) {
+function Imagens({
+  imagens,
+  mudar,
+  layout,
+  mudarLayout,
+}: {
+  imagens: ImagemRef[]
+  mudar: (i: ImagemRef[]) => void
+  layout: 'padrao' | 'livre'
+  mudarLayout: (l: 'padrao' | 'livre') => void
+}) {
   const [destino, setDestino] = useState<Slot>('tendencia')
   const [arrastando, setArrastando] = useState(false)
   const [erro, setErro] = useState('')
@@ -279,7 +294,28 @@ function Imagens({ imagens, mudar }: { imagens: ImagemRef[]; mudar: (i: ImagemRe
 
   return (
     <section>
-      <h3 className="mb-1 text-sm font-semibold">Imagens</h3>
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <h3 className="titulo text-base">Imagens</h3>
+        <Abas
+          ativa={layout}
+          mudar={mudarLayout}
+          itens={[
+            ['padrao', 'Espaços fixos'],
+            ['livre', 'Posição livre'],
+          ]}
+        />
+        {layout === 'livre' && imagens.some((i) => i.livre) && (
+          <button className={btnMini} onClick={() => mudar(imagens.map(({ livre: _l, ...i }) => i))}>
+            Reorganizar
+          </button>
+        )}
+      </div>
+      {layout === 'livre' && (
+        <p className="mb-3 rounded-[10px] bg-sinal-claro px-3 py-2 text-xs">
+          Na prévia, arraste cada imagem para mover e puxe o canto amarelo para redimensionar. Com a imagem selecionada, as setas movem e
+          Shift+setas mudam o tamanho.
+        </p>
+      )}
       <div
         ref={zona}
         tabIndex={0}
@@ -295,21 +331,19 @@ function Imagens({ imagens, mudar }: { imagens: ImagemRef[]; mudar: (i: ImagemRe
           const arqs = [...ev.dataTransfer.files].filter((f) => f.type.startsWith('image/'))
           adicionar(arqs, arqs.map((f) => f.name))
         }}
-        className={`rounded border-2 border-dashed p-3 text-center text-xs outline-none focus:border-blue-400 ${
-          arrastando ? 'border-blue-500 bg-blue-50' : 'border-zinc-300'
-        }`}
+        className={`zona-solta ${arrastando ? 'ativa' : ''}`}
       >
-        <p className="mb-2 text-zinc-500">Arraste imagens aqui, clique nesta área e cole (Ctrl+V), ou escolha os arquivos.</p>
+        <p className="mb-2 text-cinza">Arraste imagens aqui, clique nesta área e cole (Ctrl+V), ou escolha os arquivos.</p>
         <div className="flex items-center justify-center gap-2">
           <span>Colocar em:</span>
-          <select className="rounded border px-1 py-0.5" value={destino} onChange={(ev) => setDestino(ev.target.value as Slot)}>
+          <select className="campo w-auto py-1" value={destino} onChange={(ev) => setDestino(ev.target.value as Slot)}>
             {SLOTS.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.nome}
               </option>
             ))}
           </select>
-          <label className={btn + ' cursor-pointer text-xs'}>
+          <label className={btn}>
             Escolher arquivos…
             <input
               type="file"
@@ -330,11 +364,11 @@ function Imagens({ imagens, mudar }: { imagens: ImagemRef[]; mudar: (i: ImagemRe
       {imagens.length > 0 && (
         <ul className="mt-2 space-y-1">
           {imagens.map((img) => (
-            <li key={img.id} className="flex items-center gap-2 text-xs">
+            <li key={img.id} className="linha-viva flex items-center gap-3 rounded-[12px] border border-linha p-2 text-xs">
               <Miniatura id={img.id} />
               <span className="min-w-0 flex-1 truncate">{img.nome}</span>
               <select
-                className="rounded border px-1 py-0.5"
+                className="campo w-auto py-1"
                 value={img.slot}
                 onChange={(ev) => mudar(imagens.map((i) => (i.id === img.id ? { ...i, slot: ev.target.value as Slot } : i)))}
               >
@@ -345,7 +379,7 @@ function Imagens({ imagens, mudar }: { imagens: ImagemRef[]; mudar: (i: ImagemRe
                 ))}
               </select>
               <select
-                className="rounded border px-1 py-0.5"
+                className="campo w-auto py-1"
                 title="Ajuste automático de tamanho"
                 value={img.ajuste}
                 onChange={(ev) =>

@@ -5,6 +5,7 @@ import {
   Document,
   Footer,
   Header,
+  HorizontalPositionRelativeFrom,
   ImageRun,
   Packer,
   PageNumber,
@@ -14,7 +15,9 @@ import {
   TableCell,
   TableRow,
   TextRun,
+  TextWrappingType,
   VerticalAlignTable,
+  VerticalPositionRelativeFrom,
   WidthType,
   type ICropOptions,
   type ParagraphChild,
@@ -26,6 +29,8 @@ import { mesCurto } from './historico'
 import { calcularIndicadores } from './indicadores'
 import {
   anomaliaDe,
+  AREA_IMAGENS_MM,
+  posicaoLivre,
   colunasQuadro,
   condicaoNoMes,
   dataPorExtenso,
@@ -285,7 +290,53 @@ async function paginaAnomalia(r: Relatorio, local: string): Promise<(Paragraph |
     caixa('Recomendação:', a.eixos.map((x) => [x.nome, juntar(x.recomendacaoPadrao, x.recomendacaoTecnico)])),
   ]
 
-  if (a.imagens.length) {
+  if (a.imagens.length && a.layoutImagens === 'livre') {
+    // Layout livre: imagens flutuantes na mesma posição da prévia (área proporcional à largura útil)
+    const W = Math.floor(UTIL * TWIP_PX)
+    const H = Math.round((W * AREA_IMAGENS_MM.a) / AREA_IMAGENS_MM.l)
+    const EMU = 9525 // por pixel
+    const runs: ImageRun[] = []
+    for (const [ordem, img] of a.imagens.entries()) {
+      const pos = posicaoLivre(img, a.imagens)
+      const blob = await blobImagem(img.id)
+      if (!blob) continue
+      const bmp = await createImageBitmap(blob)
+      const { width: w, height: h } = bmp
+      bmp.close()
+      const caixa = { l: (pos.l / 100) * W, a: (pos.a / 100) * H }
+      const esc = img.ajuste === 'preencher' ? Math.max(caixa.l / w, caixa.a / h) : Math.min(caixa.l / w, caixa.a / h)
+      const largura = img.ajuste === 'preencher' ? caixa.l : w * esc
+      const altura = img.ajuste === 'preencher' ? caixa.a : h * esc
+      let crop: ICropOptions | undefined
+      if (img.ajuste === 'preencher') {
+        const sobraX = Math.max(0, (1 - caixa.l / (w * esc)) * 50)
+        const sobraY = Math.max(0, (1 - caixa.a / (h * esc)) * 50)
+        crop = { left: sobraX, right: sobraX, top: sobraY, bottom: sobraY }
+      }
+      const x = (pos.x / 100) * W + (caixa.l - largura) / 2
+      const y = (pos.y / 100) * H + (caixa.a - altura) / 2
+      runs.push(
+        new ImageRun({
+          type: 'jpg',
+          data: await blob.arrayBuffer(),
+          transformation: { width: Math.round(largura), height: Math.round(altura) },
+          crop,
+          altText: { name: img.nome, description: img.nome, title: img.nome },
+          floating: {
+            horizontalPosition: { relative: HorizontalPositionRelativeFrom.MARGIN, offset: Math.round(x * EMU) },
+            verticalPosition: { relative: VerticalPositionRelativeFrom.PARAGRAPH, offset: Math.round(y * EMU) },
+            wrap: { type: TextWrappingType.NONE },
+            allowOverlap: true,
+            lockAnchor: true,
+            behindDocument: false,
+            zIndex: 251658240 + ordem * 1024, // escala que o Word usa; a última imagem fica por cima, como na prévia
+          },
+        }),
+      )
+    }
+    // parágrafo-âncora com a altura da área, para o que vier depois não ficar por baixo das imagens
+    blocos.push(new Paragraph({ children: runs, spacing: { before: 120, after: Math.round(H / TWIP_PX) } }))
+  } else if (a.imagens.length) {
     const c1 = Math.round(UTIL * (2 / 3))
     const linhas: TableRow[] = []
     if (temImg('tendencia'))

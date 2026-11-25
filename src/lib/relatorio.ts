@@ -36,6 +36,28 @@ export interface ImagemRef {
   slot: Slot
   nome: string
   ajuste: 'conter' | 'preencher' // conter = imagem inteira; preencher = recorta para ocupar o espaço
+  /** Posição no layout livre, em % da área de imagens da página (x, y, largura, altura). */
+  livre?: { x: number; y: number; l: number; a: number }
+}
+
+/** Área de imagens da página de anomalia (mm): largura útil da folha × altura reservada. */
+export const AREA_IMAGENS_MM = { l: 178, a: 124 }
+
+/** Posição padrão de cada espaço, em % da área (espelha o layout fixo). */
+export const POSICAO_SLOT: Record<Slot, { x: number; y: number; l: number; a: number }> = {
+  tendencia: { x: 0, y: 0, l: 100, a: 47 },
+  espectro: { x: 0, y: 50, l: 66, a: 50 },
+  foto: { x: 67.5, y: 50, l: 32.5, a: 50 },
+}
+
+/** Posição livre de uma imagem (se ainda não tiver, parte do espaço padrão; várias no mesmo espaço se dividem). */
+export function posicaoLivre(img: ImagemRef, todas: ImagemRef[]) {
+  if (img.livre) return img.livre
+  const doSlot = todas.filter((i) => i.slot === img.slot)
+  const k = doSlot.findIndex((i) => i.id === img.id)
+  const base = POSICAO_SLOT[img.slot]
+  const l = base.l / doSlot.length
+  return { x: base.x + l * k, y: base.y, l: l - (doSlot.length > 1 ? 1 : 0), a: base.a }
 }
 
 export interface Anomalia {
@@ -45,6 +67,8 @@ export interface Anomalia {
   notasPR: string
   eixos: Eixo[]
   imagens: ImagemRef[]
+  /** 'padrao' = espaços fixos (tendência, espectro, foto); 'livre' = posição e tamanho escolhidos na prévia */
+  layoutImagens?: 'padrao' | 'livre'
 }
 
 export interface Relatorio {

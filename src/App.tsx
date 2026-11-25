@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { GerenciarUsuarios, MeuPerfil } from './auth/Contas'
 import { TelaLogin } from './auth/TelaLogin'
-import { btn, btnPri } from './editor/campos'
+import { Abas, btn, btnFantasma, btnPri } from './editor/campos'
+import { calcularIndicadores } from './lib/indicadores'
+import { Contador } from './ui/Contador'
+import { IcAnomalia, IcEquipamentos, IcMais, IcPrevia, IcRelatorio } from './ui/Icones'
+import { Marca, Moldura } from './ui/Moldura'
 import {
   encerrarSessao,
   PAPEIS,
@@ -27,7 +31,7 @@ import { historicoDemo, linhasDemo } from './lib/demo'
 import { carregarHistoricoPasta, mesDoNome, montarExecucao, montarHistorico, type Execucao, type FonteHistorico, type Historico } from './lib/historico'
 import { escolherPasta, esquecerPasta, navegadorSuportado, pastaLembrada, reconectar } from './lib/pasta'
 import { lerDaPasta, lerLocal, maisRecente, proximaSequencia, salvarEmitido, salvarLocal, salvarNaPasta } from './lib/rascunho'
-import { aplicarHistorico, equipamentosAnomalia, hojeISO, mesmoHistorico, normalizar, novoRelatorio, type Relatorio } from './lib/relatorio'
+import { anomaliaDe, aplicarHistorico, equipamentosAnomalia, hojeISO, mesmoHistorico, normalizar, novoRelatorio, type Relatorio } from './lib/relatorio'
 import { Previa } from './report/Previa'
 
 type Aba = 'relatorio' | 'equipamentos' | 'anomalias'
@@ -364,61 +368,64 @@ export default function App() {
   // ---------- tela de entrada ----------
   if (!raiz && !fonteManual) {
     return (
-      <main className="mx-auto max-w-xl p-8">
-        <h1 className="text-2xl font-bold">VibDocs</h1>
-        <p className="mt-1 text-sm text-zinc-600">Relatórios de análise de vibração</p>
+      <Moldura>
+        <h2 className="titulo text-2xl">Abrir os dados</h2>
+        <p className="mt-2 text-sm leading-relaxed text-grafite">
+          Escolha a pasta do SharePoint que o OneDrive sincroniza neste computador. O VibDocs lê as planilhas de controle e guarda os
+          rascunhos nela.
+        </p>
         {!navegadorSuportado() ? (
-          <p className="mt-6 rounded bg-amber-100 p-3 text-sm">
-            Este navegador não permite acessar pastas. Use o Microsoft Edge ou o Google Chrome no computador, ou importe a
-            planilha manualmente abaixo.
+          <p className="mt-6 rounded-[10px] bg-sinal-claro p-3 text-sm">
+            Este navegador não abre pastas. Use o Microsoft Edge ou o Google Chrome no computador, ou importe as planilhas abaixo.
           </p>
         ) : (
-          <div className="mt-6 space-y-3 text-sm">
-            <p>
-              Escolha a pasta do SharePoint sincronizada pelo OneDrive:
-              <br />
-              <code className="text-xs">…\PRUFTECHNIK MGS\Integração de Dados Pruftechnik MGS VSB - Documentos</code>
-            </p>
-            <div className="flex gap-2">
-              {lembrada && (
-                <button
-                  className={btnPri}
-                  onClick={() => executar(async () => ((await reconectar(lembrada)) ? setRaiz(lembrada) : undefined))}
-                >
-                  Reabrir "{lembrada.name}"
-                </button>
-              )}
-              <button className={lembrada ? btn : btnPri} onClick={() => executar(async () => setRaiz(await escolherPasta()))}>
-                Escolher pasta…
+          <div className="mt-6 space-y-3">
+            {lembrada && (
+              <button
+                className={`${btnPri} h-12 w-full justify-between px-4`}
+                onClick={() => executar(async () => ((await reconectar(lembrada)) ? setRaiz(lembrada) : undefined))}
+              >
+                <span className="truncate">Reabrir {lembrada.name}</span>
+                <span aria-hidden>↵</span>
               </button>
-            </div>
+            )}
+            <button
+              className={`${lembrada ? btn : btnPri} h-12 w-full justify-between px-4`}
+              onClick={() => executar(async () => setRaiz(await escolherPasta()))}
+            >
+              <span>{lembrada ? 'Escolher outra pasta' : 'Escolher pasta'}</span>
+              <span aria-hidden>⌕</span>
+            </button>
+            <p className="text-xs text-cinza">PRUFTECHNIK MGS › Integração de Dados Pruftechnik MGS VSB - Documentos</p>
           </div>
         )}
-        <div className="mt-8 border-t pt-4 text-sm">
-          <p className="mb-2 text-zinc-600">Sem a pasta sincronizada:</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <select className="rounded border px-2 py-1" value={usina} onChange={(e) => setUsina(e.target.value)}>
+
+        <div className="mt-10 border-t border-linha pt-6">
+          <h3 className="text-sm font-semibold">Sem a pasta sincronizada</h3>
+          <p className="mt-1 text-xs text-cinza">Importe uma ou várias planilhas: a mais recente vira o mês do relatório e as outras, histórico.</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <select className="campo w-auto" value={usina} onChange={(e) => setUsina(e.target.value)} aria-label="Usina">
               {USINAS.map((u) => (
                 <option key={u}>{u}</option>
               ))}
             </select>
-            <label className={btn + ' cursor-pointer'}>
-              Importar planilha de controle (.xlsx)
-              <input type="file" accept=".xlsx" multiple className="hidden" onChange={(e) => importarXlsx([...(e.target.files ?? [])])} />
+            <label className={btn}>
+              Importar planilhas
+              <input type="file" accept=".xlsx" multiple className="sr-only" onChange={(e) => importarXlsx([...(e.target.files ?? [])])} />
             </label>
-            <button className={btn} onClick={abrirDemo}>
+            <button className={btnFantasma} onClick={abrirDemo}>
               Ver demonstração
             </button>
           </div>
         </div>
-        {erro && <p className="mt-4 rounded bg-red-100 p-3 text-sm text-red-800">{erro}</p>}
-      </main>
+        {erro && <p className="mt-6 rounded-[10px] bg-red-50 p-3 text-sm text-red-800">{erro}</p>}
+      </Moldura>
     )
   }
 
   // ---------- login ----------
   if (repo && !usuario) {
-    if (!sessaoVerificada) return <p className="p-8 text-sm text-zinc-500">Verificando sessão…</p>
+    if (!sessaoVerificada) return <p className="p-8 text-sm text-cinza">Verificando sessão…</p>
     return (
       <TelaLogin
         repo={repo}
@@ -434,167 +441,251 @@ export default function App() {
 
   const nAnom = rel ? equipamentosAnomalia(rel).length : 0
   const textoEstado =
-    estado === 'salvando' ? 'salvando…' : estado === 'pendente' ? 'alterações não salvas' : estado === 'erro' ? 'erro ao salvar' : salvoEm ? `salvo às ${salvoEm}${raiz ? ' · SharePoint' : ' · neste navegador'}` : ''
+    estado === 'salvando'
+      ? 'Salvando…'
+      : estado === 'pendente'
+        ? 'Alterações não salvas'
+        : estado === 'erro'
+          ? 'Erro ao salvar'
+          : salvoEm
+            ? `Salvo às ${salvoEm}${raiz ? ' no SharePoint' : ' neste navegador'}`
+            : ''
+  const ind = rel ? calcularIndicadores(rel) : undefined
+  const atualInd = ind && { exec: ind.execucao.at(-1)?.indice ?? null, reinc: ind.reincidencia.at(-1)?.indice ?? null }
+  const abasTrilho: [Aba, string, () => ReactNode][] = [
+    ['relatorio', 'Relatório', IcRelatorio],
+    ['equipamentos', 'Equipamentos', IcEquipamentos],
+    ['anomalias', 'Anomalias', IcAnomalia],
+  ]
 
   // ---------- editor + prévia ----------
   return (
     <>
-      <div className="tela flex h-full flex-col">
-        <header className="flex flex-wrap items-center gap-2 border-b bg-white px-3 py-2 text-sm">
-          <b className="mr-2">VibDocs</b>
-          {!rel?.avulso && (
-            <>
-              <select className="rounded border px-2 py-1" value={usina} onChange={(e) => setUsina(e.target.value)} disabled={!raiz}>
-                {USINAS.map((u) => (
-                  <option key={u}>{u}</option>
-                ))}
-              </select>
-              {raiz ? (
-                <select className="rounded border px-2 py-1" value={mes} onChange={(e) => setMes(e.target.value)}>
-                  {Object.entries(meses).flatMap(([ano, ms]) =>
-                    ms.map((m) => (
-                      <option key={`${ano}/${m}`} value={`${ano}/${m}`}>
-                        {m} {ano}
-                      </option>
-                    )),
-                  )}
-                </select>
-              ) : (
-                <span className="text-xs text-zinc-500">fonte: {fonteManual}</span>
+      <div className="tela flex h-full">
+        {/* Trilho lateral */}
+        <aside className="flex w-[4.25rem] shrink-0 flex-col items-center gap-2 bg-preto py-4">
+          <div className="mb-4" title="VibDocs">
+            <Marca tamanho={32} />
+          </div>
+          {abasTrilho.map(([id, nome, Icone]) => (
+            <button key={id} className="trilho-item" aria-current={aba === id ? 'page' : undefined} title={nome} onClick={() => setAba(id)}>
+              <Icone />
+              {id === 'anomalias' && nAnom > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-sinal px-1 text-[10px] font-bold text-preto">
+                  {nAnom}
+                </span>
               )}
-              <select className="rounded border px-2 py-1" value={sigla} onChange={(e) => setSigla(e.target.value)}>
-                {siglas.map(([s, n]) => (
-                  <option key={s} value={s}>
-                    {s} ({n})
-                  </option>
-                ))}
-              </select>
-            </>
+            </button>
+          ))}
+          <div className="my-2 h-px w-8 bg-white/10" />
+          <button className="trilho-item" title="Novo relatório avulso (qualquer usina ou área, fora da planilha)" onClick={novoAvulso}>
+            <IcMais />
+          </button>
+          <div className="flex-1" />
+          {usuario && (
+            <details className="relative">
+              <summary className="trilho-item cursor-pointer list-none" title={usuario.nome}>
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-sinal text-sm font-bold text-preto">
+                  {usuario.nome.trim().charAt(0).toUpperCase()}
+                </span>
+              </summary>
+              <div className="surgir absolute bottom-0 left-full z-40 ml-3 w-60 rounded-[14px] border border-linha bg-white p-1.5 text-sm shadow-xl">
+                <div className="px-2.5 py-2">
+                  <div className="font-semibold">{usuario.nome}</div>
+                  <div className="text-xs text-cinza">
+                    {PAPEIS[usuario.papel]}
+                    {usuario.cargo ? `, ${usuario.cargo}` : ''}
+                  </div>
+                </div>
+                <div className="my-1 h-px bg-linha" />
+                {usuario.id !== USUARIO_DEMO.id && (
+                  <>
+                    <button className="menu-item" onClick={() => setJanela('perfil')}>
+                      Meu perfil
+                    </button>
+                    {usuario.papel === 'admin' && (
+                      <button className="menu-item" onClick={() => setJanela('usuarios')}>
+                        Usuários
+                      </button>
+                    )}
+                    <button className="menu-item" onClick={sairDaConta}>
+                      Sair da conta
+                    </button>
+                  </>
+                )}
+                <button className="menu-item text-cinza" onClick={sair}>
+                  Trocar fonte de dados
+                </button>
+              </div>
+            </details>
           )}
-          {rel?.avulso && (
-            <>
-              <span className="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-800">relatório avulso · {rel.usina}</span>
-              {linhas.length > 0 && (
-                <button className={btn} onClick={fecharAvulso}>
-                  Voltar à área
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Barra superior: caminho Usina / Mês / Área e ações */}
+          <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-linha bg-white px-5 py-3">
+            {!rel?.avulso ? (
+              <nav className="caminho flex items-center gap-1 text-sm" aria-label="Relatório aberto">
+                <select value={usina} onChange={(e) => setUsina(e.target.value)} disabled={!raiz} aria-label="Usina">
+                  {USINAS.map((u) => (
+                    <option key={u}>{u}</option>
+                  ))}
+                </select>
+                <span className="text-[#c9c9c4]">/</span>
+                {raiz ? (
+                  <select value={mes} onChange={(e) => setMes(e.target.value)} aria-label="Mês">
+                    {Object.entries(meses).flatMap(([ano, ms]) =>
+                      ms.map((m) => (
+                        <option key={`${ano}/${m}`} value={`${ano}/${m}`}>
+                          {m.slice(3)} {ano}
+                        </option>
+                      )),
+                    )}
+                  </select>
+                ) : (
+                  <span className="px-2 text-cinza">{fonteManual}</span>
+                )}
+                <span className="text-[#c9c9c4]">/</span>
+                <select value={sigla} onChange={(e) => setSigla(e.target.value)} aria-label="Área" className="titulo">
+                  {siglas.map(([s, n]) => (
+                    <option key={s} value={s}>
+                      {s} ({n})
+                    </option>
+                  ))}
+                </select>
+              </nav>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-sinal-claro px-3 py-1 text-sm font-medium">Relatório avulso, {rel.usina}</span>
+                {linhas.length > 0 && (
+                  <button className={btnFantasma} onClick={fecharAvulso}>
+                    Voltar à área
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div className="ml-auto flex items-center gap-2">
+              {carregandoHist && <span className="text-xs text-amber-700">{carregandoHist}</span>}
+              <span className={`mr-1 flex items-center gap-1.5 text-xs ${estado === 'erro' ? 'text-red-700' : 'text-cinza'}`}>
+                {textoEstado && (
+                  <span className={`h-1.5 w-1.5 rounded-full ${estado === 'salvo' ? 'bg-green-600' : estado === 'erro' ? 'bg-red-600' : 'bg-sinal'}`} />
+                )}
+                {textoEstado}
+              </span>
+              {rel && !raiz && (
+                <button className={btnFantasma} onClick={baixarRascunho} title="Sem pasta conectada: baixe o rascunho para guardar no SharePoint">
+                  Baixar rascunho
                 </button>
               )}
-            </>
-          )}
-          <button className={btn} onClick={novoAvulso} title="Relatório para qualquer usina/área, fora da planilha de controle">
-            + Avulso
-          </button>
-          <div className="ml-auto flex items-center gap-2">
-            {carregandoHist && <span className="text-xs text-amber-700">{carregandoHist}</span>}
-            <span className={`text-xs ${estado === 'erro' ? 'text-red-700' : 'text-zinc-500'}`}>{textoEstado}</span>
-            {rel && !raiz && (
-              <button className={btn} onClick={baixarRascunho} title="Sem pasta conectada: baixe o rascunho para guardar no SharePoint">
-                Baixar rascunho
+              <button
+                className={btnFantasma}
+                onClick={() => setPreviaAberta((v) => !v)}
+                aria-pressed={previaAberta}
+                title={previaAberta ? 'Fechar prévia' : 'Abrir prévia'}
+              >
+                <IcPrevia />
+                {previaAberta ? 'Fechar prévia' : 'Abrir prévia'}
               </button>
-            )}
-            <button className={btn} onClick={() => setPreviaAberta((v) => !v)}>
-              {previaAberta ? 'Fechar prévia' : 'Abrir prévia'}
-            </button>
-            <button className={btn} onClick={exportarWord} disabled={!rel || gerandoWord}>
-              {gerandoWord ? 'Gerando Word…' : 'Exportar Word'}
-            </button>
-            <button className={btnPri} onClick={() => window.print()} disabled={!rel}>
-              Exportar PDF
-            </button>
-            {usuario && (
-              <details className="relative">
-                <summary className={btn + ' cursor-pointer list-none'} title="Minha conta">
-                  👤 {usuario.nome}
-                </summary>
-                <div className="absolute right-0 z-40 mt-1 w-56 rounded border bg-white p-1 text-sm shadow-lg">
-                  <div className="border-b px-2 py-1 text-xs text-zinc-500">
-                    {PAPEIS[usuario.papel]}
-                    {usuario.cargo ? ` · ${usuario.cargo}` : ''}
-                  </div>
-                  {usuario.id !== USUARIO_DEMO.id && (
-                    <>
-                      <button className="block w-full rounded px-2 py-1 text-left hover:bg-zinc-100" onClick={() => setJanela('perfil')}>
-                        Meu perfil
-                      </button>
-                      {usuario.papel === 'admin' && (
-                        <button className="block w-full rounded px-2 py-1 text-left hover:bg-zinc-100" onClick={() => setJanela('usuarios')}>
-                          Usuários
-                        </button>
-                      )}
-                      <button className="block w-full rounded px-2 py-1 text-left hover:bg-zinc-100" onClick={sairDaConta}>
-                        Sair da conta
-                      </button>
-                    </>
-                  )}
-                  <button className="block w-full rounded px-2 py-1 text-left text-zinc-500 hover:bg-zinc-100" onClick={sair}>
-                    Trocar fonte de dados
-                  </button>
-                </div>
-              </details>
-            )}
-          </div>
-        </header>
-        {janela === 'perfil' && usuario && repo && (
-          <MeuPerfil repo={repo} usuario={usuario} mudou={setUsuario} fechar={() => setJanela(undefined)} />
-        )}
-        {janela === 'usuarios' && usuario && repo && (
-          <GerenciarUsuarios repo={repo} usuario={usuario} fechar={() => setJanela(undefined)} />
-        )}
-        {erro && <p className="bg-red-100 px-3 py-2 text-sm text-red-800">{erro}</p>}
-        {aviso && (
-          <p className="flex items-center bg-green-100 px-3 py-2 text-sm text-green-900">
-            {aviso}
-            <button className="ml-auto text-xs underline" onClick={() => setAviso('')}>
-              ok
-            </button>
-          </p>
-        )}
+              <button className={btn} onClick={exportarWord} disabled={!rel || gerandoWord}>
+                {gerandoWord ? 'Gerando Word…' : 'Exportar Word'}
+              </button>
+              <button className={btnPri} onClick={() => window.print()} disabled={!rel}>
+                Exportar PDF
+              </button>
+            </div>
+          </header>
 
-        {!rel ? (
-          <p className="p-6 text-sm text-zinc-500">Carregando…</p>
-        ) : (
-          <Group orientation="horizontal" className="min-h-0 flex-1">
-            <Panel defaultSize="50" minSize="30">
-              <div className="flex h-full flex-col">
-                <nav className="flex shrink-0 gap-1 border-b bg-white px-2 pt-2 text-sm">
-                  {(
+          {janela === 'perfil' && usuario && repo && (
+            <MeuPerfil repo={repo} usuario={usuario} mudou={setUsuario} fechar={() => setJanela(undefined)} />
+          )}
+          {janela === 'usuarios' && usuario && repo && (
+            <GerenciarUsuarios repo={repo} usuario={usuario} fechar={() => setJanela(undefined)} />
+          )}
+          {erro && <p className="surgir border-b border-red-200 bg-red-50 px-5 py-2 text-sm text-red-800">{erro}</p>}
+          {aviso && (
+            <p className="surgir flex items-center border-b border-green-200 bg-green-50 px-5 py-2 text-sm text-green-900">
+              {aviso}
+              <button className={`${btnFantasma} ml-auto`} onClick={() => setAviso('')}>
+                Fechar
+              </button>
+            </p>
+          )}
+
+          {!rel ? (
+            <p className="p-8 text-sm text-cinza">Carregando o relatório…</p>
+          ) : (
+            <>
+              {/* Faixa de números do relatório */}
+              <section className="grid grid-cols-2 gap-3 px-5 pt-4 lg:grid-cols-4" aria-label="Resumo">
+                {(
+                  [
+                    ['Equipamentos', <Contador valor={rel.equipamentos.length} />, 'na área'],
+                    ['Anomalias', <Contador valor={nAnom} />, 'com página no relatório'],
+                    ['Execução', <Contador valor={atualInd?.exec == null ? null : atualInd.exec * 100} casas={1} sufixo="%" />, 'das ordens do mês'],
                     [
-                      ['relatorio', 'Relatório'],
-                      ['equipamentos', `Equipamentos (${rel.equipamentos.length})`],
-                      ['anomalias', `Anomalias (${nAnom})`],
-                    ] as [Aba, string][]
-                  ).map(([id, nome]) => (
-                    <button
-                      key={id}
-                      onClick={() => setAba(id)}
-                      className={`rounded-t border border-b-0 px-3 py-1 ${aba === id ? 'bg-zinc-50 font-semibold' : 'border-transparent text-zinc-600'}`}
-                    >
-                      {nome}
-                    </button>
-                  ))}
-                  <span className="ml-auto self-center pb-1 font-mono text-xs text-zinc-500">{rel.codigo}</span>
-                </nav>
-                <div className="min-h-0 flex-1 overflow-auto bg-zinc-50">
-                  {aba === 'relatorio' && <PainelRelatorio r={rel} atualizar={atualizar} />}
-                  {aba === 'equipamentos' && <PainelEquipamentos r={rel} atualizar={atualizar} />}
-                  {aba === 'anomalias' && (
-                    <PainelAnomalias r={rel} atualizar={atualizar} selecionado={anomaliaSel} selecionar={setAnomaliaSel} />
-                  )}
-                </div>
-              </div>
-            </Panel>
-            {previaAberta && (
-              <>
-                <Separator className="w-1.5 bg-zinc-300 hover:bg-zinc-400" />
-                <Panel defaultSize="50" minSize="20">
-                  <div className="h-full overflow-auto bg-zinc-200">
-                    <Previa r={rel} />
+                      'Reincidência',
+                      <Contador valor={atualInd?.reinc == null ? null : atualInd.reinc * 100} casas={1} sufixo="%" />,
+                      'das anomalias do mês',
+                    ],
+                  ] as [string, ReactNode, string][]
+                ).map(([rotulo, valor, dica]) => (
+                  <div key={rotulo} className="numero painel px-4 py-3">
+                    <div className="text-[13px] text-cinza">{rotulo}</div>
+                    <div className="titulo-grande mt-1 text-[28px]">{valor}</div>
+                    <div className="mt-1 text-xs text-cinza">{dica}</div>
+                  </div>
+                ))}
+              </section>
+
+              <Group orientation="horizontal" className="min-h-0 flex-1 p-5 pt-4">
+                <Panel defaultSize="52" minSize="30">
+                  <div className="painel flex h-full flex-col overflow-hidden">
+                    <div className="flex shrink-0 items-center gap-3 border-b border-linha px-4 py-3">
+                      <Abas
+                        ativa={aba}
+                        mudar={setAba}
+                        itens={[
+                          ['relatorio', 'Relatório'],
+                          ['equipamentos', `Equipamentos ${rel.equipamentos.length}`],
+                          ['anomalias', `Anomalias ${nAnom}`],
+                        ]}
+                      />
+                      <span className="tag ml-auto truncate text-sm text-cinza" title="Código do relatório">
+                        {rel.codigo}
+                      </span>
+                    </div>
+                    <div className="min-h-0 flex-1 overflow-auto">
+                      {aba === 'relatorio' && <PainelRelatorio r={rel} atualizar={atualizar} />}
+                      {aba === 'equipamentos' && <PainelEquipamentos r={rel} atualizar={atualizar} />}
+                      {aba === 'anomalias' && (
+                        <PainelAnomalias r={rel} atualizar={atualizar} selecionado={anomaliaSel} selecionar={setAnomaliaSel} />
+                      )}
+                    </div>
                   </div>
                 </Panel>
-              </>
-            )}
-          </Group>
-        )}
+                {previaAberta && (
+                  <>
+                    <Separator className="divisor mx-1.5 w-2" />
+                    <Panel defaultSize="48" minSize="20">
+                      <div className="painel h-full overflow-auto bg-[#e9e9e6]">
+                        <Previa
+                          r={rel}
+                          editarImagens={(local, imagens) =>
+                            atualizar((x) => {
+                              const eq = x.equipamentos.find((q) => q.local === local)
+                              return eq ? { ...x, anomalias: { ...x.anomalias, [local]: { ...anomaliaDe(x, eq), imagens } } } : x
+                            })
+                          }
+                        />
+                      </div>
+                    </Panel>
+                  </>
+                )}
+              </Group>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Impressão/PDF: a prévia fora do layout de painéis, em largura A4 real. */}

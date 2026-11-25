@@ -1,5 +1,20 @@
 @import 'tailwindcss';
 
+/* ================= Tokens (ver docs/VibDocs-design.md) ================= */
+@theme {
+  --color-sinal: #ffc20e; /* amarelo do logo: ação principal, ativo, foco */
+  --color-sinal-claro: #fff3cc;
+  --color-preto: #000000;
+  --color-grafite: #3a3a38;
+  --color-cinza: #6f6f6b;
+  --color-nevoa: #f3f3f1;
+  --color-linha: #e4e4e0;
+  --font-sans: 'Archivo Variable', 'Segoe UI', Arial, sans-serif;
+  --radius-painel: 16px;
+  --radius-campo: 10px;
+  --ease-mola: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 html,
 body,
 #root {
@@ -7,9 +22,486 @@ body,
 }
 
 body {
-  font-family: system-ui, 'Segoe UI', Arial, sans-serif;
-  color: #111;
-  background: #f4f4f5;
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-preto);
+  background: var(--color-nevoa);
+  -webkit-font-smoothing: antialiased;
+  accent-color: var(--color-preto);
+}
+
+@layer components {
+/* títulos com largura expandida: plaqueta industrial */
+.titulo {
+  font-stretch: 118%;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.titulo-grande {
+  font-stretch: 125%;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.tag {
+  font-stretch: 88%;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-sinal);
+  outline-offset: 2px;
+}
+
+/* ================= Botões ================= */
+.bt {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 2.25rem;
+  padding: 0 0.9rem;
+  border-radius: var(--radius-campo);
+  font-size: 0.875rem;
+  font-weight: 550;
+  white-space: nowrap;
+  transition:
+    color 0.25s var(--ease-mola),
+    border-color 0.25s,
+    transform 0.15s;
+  cursor: pointer;
+}
+.bt:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.bt:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* preenchimento que entra da esquerda no hover */
+.bt::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.35s var(--ease-mola);
+}
+.bt:hover:not(:disabled)::before {
+  transform: scaleX(1);
+}
+.bt-pri {
+  background: var(--color-sinal);
+  color: var(--color-preto);
+}
+.bt-pri::before {
+  background: var(--color-preto);
+}
+.bt-pri:hover:not(:disabled) {
+  color: var(--color-sinal);
+}
+.bt-sec {
+  background: #fff;
+  border: 1px solid var(--color-linha);
+  color: var(--color-preto);
+}
+.bt-sec::before {
+  background: var(--color-sinal-claro);
+}
+.bt-sec:hover:not(:disabled) {
+  border-color: var(--color-sinal);
+}
+.bt-fantasma {
+  color: var(--color-grafite);
+}
+.bt-fantasma::before {
+  background: var(--color-nevoa);
+}
+.bt-mini {
+  height: 1.6rem;
+  padding: 0 0.55rem;
+  font-size: 0.75rem;
+  border-radius: 8px;
+}
+
+/* ================= Campos ================= */
+.campo {
+  width: 100%;
+  border: 1px solid var(--color-linha);
+  border-radius: var(--radius-campo);
+  background: #fff;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.875rem;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+.campo:hover {
+  border-color: #cfcfca;
+}
+.campo:focus {
+  outline: none;
+  border-color: var(--color-preto);
+  box-shadow: 0 0 0 3px var(--color-sinal-claro);
+}
+
+/* ================= Painéis ================= */
+.painel {
+  background: #fff;
+  border: 1px solid var(--color-linha);
+  border-radius: var(--radius-painel);
+}
+
+/* ================= Tabelas: barra amarela que cresce na linha em hover ================= */
+.linha-viva {
+  position: relative;
+  transition: background-color 0.2s;
+}
+.linha-viva > td:first-child {
+  position: relative;
+}
+.linha-viva > td:first-child::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 15%;
+  bottom: 15%;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--color-sinal);
+  transform: scaleY(0);
+  transition: transform 0.25s var(--ease-mola);
+}
+.linha-viva:hover {
+  background: #fafaf8;
+}
+.linha-viva:hover > td:first-child::before {
+  transform: scaleY(1);
+}
+
+/* ================= Etiqueta de condição ================= */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.6rem;
+  height: 1.35rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  transition: transform 0.2s var(--ease-mola);
+}
+
+/* seletor nativo por baixo de uma etiqueta colorida */
+.seletor-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 1.75rem;
+  max-width: 15rem;
+  padding: 0 0.65rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.08);
+  cursor: pointer;
+  transition:
+    transform 0.2s var(--ease-mola),
+    box-shadow 0.2s;
+}
+.seletor-chip:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 0 0 1px rgb(0 0 0 / 0.15),
+    0 3px 8px rgb(0 0 0 / 0.12);
+}
+.seletor-chip:focus-within {
+  outline: 2px solid var(--color-preto);
+  outline-offset: 2px;
+}
+.seletor-chip select {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* ações da linha aparecem no hover (e sempre no foco por teclado / toque) */
+.acoes-no-hover .acoes {
+  opacity: 0;
+  transform: translateX(6px);
+  transition:
+    opacity 0.2s,
+    transform 0.25s var(--ease-mola);
+}
+.acoes-no-hover:hover .acoes,
+.acoes-no-hover:focus-within .acoes {
+  opacity: 1;
+  transform: none;
+}
+@media (hover: none) {
+  .acoes-no-hover .acoes {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ================= Mapa de condição (quadradinhos por mês) ================= */
+.mapa {
+  display: inline-flex;
+  gap: 3px;
+  vertical-align: middle;
+}
+.mapa > span {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  transition: transform 0.2s var(--ease-mola);
+}
+.mapa > span.vazio {
+  background: var(--color-nevoa);
+  outline: 1px solid var(--color-linha);
+  outline-offset: -1px;
+}
+.mapa > span:hover {
+  transform: scale(1.6);
+  position: relative;
+  z-index: 1;
+}
+
+/* ================= Abas com indicador que desliza ================= */
+.abas {
+  position: relative;
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: 12px;
+  background: var(--color-nevoa);
+}
+.abas button {
+  position: relative;
+  z-index: 1;
+  height: 2rem;
+  padding: 0 0.85rem;
+  border-radius: 9px;
+  font-size: 0.875rem;
+  font-weight: 550;
+  color: var(--color-cinza);
+  transition: color 0.2s;
+}
+.abas button:hover {
+  color: var(--color-preto);
+}
+.abas button[aria-selected='true'] {
+  color: var(--color-preto);
+}
+.abas .indicador {
+  position: absolute;
+  top: 0.25rem;
+  bottom: 0.25rem;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+  transition:
+    left 0.35s var(--ease-mola),
+    width 0.35s var(--ease-mola);
+}
+
+/* ================= Trilho lateral ================= */
+.trilho-item {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 12px;
+  color: #9a9a95;
+  transition:
+    color 0.2s,
+    background-color 0.2s;
+}
+.trilho-item:hover {
+  color: #fff;
+  background: #1c1c1b;
+}
+.trilho-item[aria-current='page'] {
+  color: var(--color-sinal);
+}
+.trilho-item[aria-current='page']::after {
+  content: '';
+  position: absolute;
+  left: -0.75rem;
+  top: 25%;
+  bottom: 25%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--color-sinal);
+}
+
+/* ================= Números da faixa ================= */
+.numero {
+  transition:
+    transform 0.25s var(--ease-mola),
+    border-color 0.25s;
+}
+.numero:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-sinal);
+}
+
+/* ================= Caminho Usina / Mês / Área ================= */
+.caminho select {
+  appearance: none;
+  height: 2rem;
+  padding: 0 0.6rem;
+  border-radius: 8px;
+  background: transparent;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+.caminho select:hover:not(:disabled) {
+  background: var(--color-nevoa);
+}
+.caminho select:disabled {
+  cursor: default;
+}
+.caminho select.titulo {
+  font-size: 1.05rem;
+}
+
+/* ================= Menu ================= */
+.menu-item {
+  display: block;
+  width: 100%;
+  padding: 0.45rem 0.65rem;
+  border-radius: 9px;
+  text-align: left;
+  transition:
+    background-color 0.15s,
+    padding-left 0.2s var(--ease-mola);
+}
+.menu-item:hover {
+  background: var(--color-nevoa);
+  padding-left: 0.9rem;
+}
+
+/* ================= Divisor da prévia (arrastar) ================= */
+.divisor {
+  position: relative;
+  border-radius: 99px;
+  transition: background-color 0.2s;
+}
+.divisor::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 36px;
+  border-radius: 99px;
+  background: #cfcfca;
+  transform: translate(-50%, -50%);
+  transition:
+    background-color 0.2s,
+    height 0.25s var(--ease-mola);
+}
+.divisor:hover::after,
+.divisor[data-separator='active']::after {
+  background: var(--color-sinal);
+  height: 64px;
+}
+
+/* ================= Lista de anomalias ================= */
+.anom-item {
+  display: block;
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 0.55rem 0.65rem;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  text-align: left;
+  font-size: 0.8rem;
+  transition:
+    background-color 0.2s,
+    border-color 0.2s,
+    transform 0.25s var(--ease-mola);
+}
+.anom-item:hover {
+  background: #fff;
+  transform: translateX(3px);
+}
+.anom-item.ativo {
+  background: #fff;
+  border-color: var(--color-preto);
+  box-shadow: inset 3px 0 0 var(--color-sinal);
+}
+
+/* condição no seletor do relatório */
+.cond-opcao {
+  transition: background-color 0.15s;
+}
+.cond-opcao:hover {
+  background: var(--color-nevoa);
+}
+.cond-opcao:hover .chip {
+  transform: scale(1.12);
+}
+
+/* bloco de eixo */
+.eixo {
+  transition: border-color 0.25s;
+}
+.eixo:focus-within {
+  border-color: var(--color-preto);
+}
+
+/* área para soltar / colar imagens */
+.zona-solta {
+  border: 1.5px dashed #cfcfca;
+  border-radius: 14px;
+  padding: 1rem;
+  text-align: center;
+  font-size: 0.8rem;
+  transition:
+    border-color 0.2s,
+    background-color 0.2s;
+}
+.zona-solta:hover,
+.zona-solta:focus {
+  outline: none;
+  border-color: var(--color-preto);
+}
+.zona-solta.ativa {
+  border-color: var(--color-sinal);
+  background: var(--color-sinal-claro);
+}
+
+/* menus e janelas flutuantes surgem do ponto de origem */
+@keyframes surgir {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+.surgir {
+  animation: surgir 0.2s var(--ease-mola);
+}
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }
 
 /* ---------- Páginas do relatório (prévia e impressão) ---------- */
@@ -82,6 +574,69 @@ body {
   display: block;
   width: 100%;
   height: auto;
+}
+
+/* ---------- Layout livre das imagens ---------- */
+.area-livre {
+  position: relative;
+  margin-top: 3mm;
+  width: 100%;
+}
+.area-livre.editavel {
+  background-image:
+    linear-gradient(to right, rgb(0 0 0 / 0.04) 1px, transparent 1px), linear-gradient(to bottom, rgb(0 0 0 / 0.04) 1px, transparent 1px);
+  background-size: 10% 10%;
+  outline: 1px dashed #d6d6d2;
+}
+.area-livre .peca {
+  position: absolute;
+  border: 1px solid #000;
+  padding: 1mm;
+  background: #fff;
+}
+.area-livre.editavel .peca {
+  cursor: grab;
+  touch-action: none;
+  transition:
+    box-shadow 0.2s,
+    outline-color 0.2s;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+.area-livre.editavel .peca:hover,
+.area-livre.editavel .peca:focus-visible {
+  outline-color: var(--color-sinal);
+}
+.area-livre.editavel .peca.ativa {
+  cursor: grabbing;
+  outline-color: var(--color-preto);
+  box-shadow: 0 10px 24px rgb(0 0 0 / 0.18);
+  z-index: 2;
+}
+.area-livre.arrastando .peca:not(.ativa) {
+  opacity: 0.6;
+}
+.area-livre .alca {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--color-sinal);
+  border: 2px solid #000;
+  cursor: nwse-resize;
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity 0.2s,
+    transform 0.2s var(--ease-mola);
+}
+.area-livre .peca:hover .alca,
+.area-livre .peca.ativa .alca,
+.area-livre .peca:focus-visible .alca {
+  opacity: 1;
+  transform: none;
 }
 
 /* Bloco usado só na impressão: fora do layout de painéis da tela. */

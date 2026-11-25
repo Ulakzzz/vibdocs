@@ -4,6 +4,7 @@ import { CONDICOES, severidade } from '../lib/condicao'
 import { urlImagem } from '../lib/imagens'
 import { mesCurto } from '../lib/historico'
 import { calcularIndicadores } from '../lib/indicadores'
+import { AreaLivre } from './AreaLivre'
 import { graficosDoRelatorio } from './graficos'
 import {
   anomaliaDe,
@@ -93,7 +94,8 @@ function PaginaIndicadores({ r }: { r: Relatorio }) {
   )
 }
 
-export function Previa({ r }: { r: Relatorio }) {
+/** editarImagens: só na prévia da tela — permite arrastar/redimensionar imagens no layout livre. */
+export function Previa({ r, editarImagens }: { r: Relatorio; editarImagens?: (local: string, imagens: ImagemRef[]) => void }) {
   const quadro = equipamentosQuadro(r)
   const anomalias = equipamentosAnomalia(r)
   const colunas = colunasQuadro(r)
@@ -212,11 +214,15 @@ export function Previa({ r }: { r: Relatorio }) {
                 </p>
               ))}
             </div>
-            <div className="grade-imagens">
-              <Espaco slot="tendencia" imagens={a.imagens} rotulo="tendência" classe="col-span-3 h-[58mm]" />
-              <Espaco slot="espectro" imagens={a.imagens} rotulo="espectro / envelope" classe="col-span-2 h-[62mm]" />
-              <Espaco slot="foto" imagens={a.imagens} rotulo="foto" classe="h-[62mm]" />
-            </div>
+            {a.layoutImagens === 'livre' ? (
+              <AreaLivre imagens={a.imagens} editar={editarImagens && ((imgs) => editarImagens(e.local, imgs))} />
+            ) : (
+              <div className="grade-imagens">
+                <Espaco slot="tendencia" imagens={a.imagens} rotulo="tendência" classe="col-span-3 h-[58mm]" />
+                <Espaco slot="espectro" imagens={a.imagens} rotulo="espectro / envelope" classe="col-span-2 h-[62mm]" />
+                <Espaco slot="foto" imagens={a.imagens} rotulo="foto" classe="h-[62mm]" />
+              </div>
+            )}
           </section>
         )
       })}

@@ -1,7 +1,8 @@
 // Login: o técnico escolhe o próprio nome na lista e digita a senha.
 // Também: criar conta, primeira conta (vira administrador) e troca obrigatória após redefinição.
 import { useEffect, useState } from 'react'
-import { btn, btnPri, Campo, Texto } from '../editor/campos'
+import { btnFantasma, btnPri, Campo, Texto } from '../editor/campos'
+import { Moldura } from '../ui/Moldura'
 import {
   criarConta,
   entrar,
@@ -92,24 +93,24 @@ export function TelaLogin({
   const primeira = usuarios !== undefined && ativos.length === 0
 
   return (
-    <main className="mx-auto max-w-md p-8">
-      <h1 className="text-2xl font-bold">VibDocs</h1>
-      <p className="mt-1 text-xs text-zinc-500">
+    <Moldura>
+      <p className="text-xs text-cinza">
         Contas {repo.onde === 'sharepoint' ? 'compartilhadas pela pasta do SharePoint' : 'guardadas só neste navegador (sem pasta conectada)'}
       </p>
 
-      {usuarios === undefined && !erro && <p className="mt-6 text-sm text-zinc-500">Carregando contas…</p>}
+      {usuarios === undefined && !erro && <p className="mt-6 text-sm text-cinza">Carregando contas…</p>}
 
       {modo === 'entrar' && usuarios !== undefined && (
         <form
-          className="mt-6 space-y-3"
+          className="mt-2 space-y-4"
           onSubmit={(e) => {
             e.preventDefault()
             fazerLogin()
           }}
         >
+          <h2 className="titulo text-2xl">Entrar</h2>
           <Campo rotulo="Seu nome">
-            <select className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm" value={id} onChange={(e) => setId(e.target.value)}>
+            <select className="campo" value={id} onChange={(e) => setId(e.target.value)}>
               <option value="">— escolha —</option>
               {ativos.map((u) => (
                 <option key={u.id} value={u.id}>
@@ -122,33 +123,33 @@ export function TelaLogin({
           <Campo rotulo="Senha">
             <Texto tipo="password" valor={senha} mudar={setSenha} />
           </Campo>
-          <label className="flex items-center gap-2 text-xs">
+          <label className="flex items-center gap-2 text-sm text-grafite">
             <input type="checkbox" checked={manter} onChange={(e) => setManter(e.target.checked)} />
             Manter conectado neste computador
           </label>
           <div className="flex items-center gap-2">
-            <button type="submit" className={btnPri} disabled={!id || !senha || ocupado}>
+            <button type="submit" className={`${btnPri} h-11 px-6`} disabled={!id || !senha || ocupado}>
               {ocupado ? 'Entrando…' : 'Entrar'}
             </button>
-            <button type="button" className={btn} onClick={() => setModo('criar')}>
+            <button type="button" className={btnFantasma} onClick={() => setModo('criar')}>
               Criar conta
             </button>
           </div>
-          <p className="text-[11px] text-zinc-500">Esqueceu a senha? Peça a um administrador para redefini-la.</p>
+          <p className="text-xs text-cinza">Esqueceu a senha? Peça a um administrador para redefini-la.</p>
         </form>
       )}
 
       {modo === 'criar' && (
         <form
-          className="mt-6 space-y-3"
+          className="mt-2 space-y-4"
           onSubmit={(e) => {
             e.preventDefault()
             fazerCadastro()
           }}
         >
-          <h2 className="font-semibold">{primeira ? 'Primeira conta' : 'Criar conta'}</h2>
+          <h2 className="titulo text-2xl">{primeira ? 'Primeira conta' : 'Criar conta'}</h2>
           {primeira && (
-            <p className="rounded bg-blue-50 p-2 text-xs text-blue-900">
+            <p className="rounded-[10px] bg-sinal-claro p-3 text-sm">
               Ainda não há contas. A primeira conta criada será a de <b>{PAPEIS.admin}</b>, que gerencia as demais.
             </p>
           )}
@@ -172,11 +173,11 @@ export function TelaLogin({
             </Campo>
           </div>
           <div className="flex gap-2">
-            <button type="submit" className={btnPri} disabled={!nova.nome.trim() || !nova.senha || ocupado}>
+            <button type="submit" className={`${btnPri} h-11 px-6`} disabled={!nova.nome.trim() || !nova.senha || ocupado}>
               {ocupado ? 'Criando…' : 'Criar e entrar'}
             </button>
             {!primeira && (
-              <button type="button" className={btn} onClick={() => setModo('entrar')}>
+              <button type="button" className={btnFantasma} onClick={() => setModo('entrar')}>
                 Já tenho conta
               </button>
             )}
@@ -186,31 +187,31 @@ export function TelaLogin({
 
       {modo === 'trocar' && pendente && (
         <form
-          className="mt-6 space-y-3"
+          className="mt-2 space-y-4"
           onSubmit={(e) => {
             e.preventDefault()
             fazerTroca()
           }}
         >
-          <h2 className="font-semibold">Defina uma nova senha</h2>
-          <p className="text-xs text-zinc-600">{pendente.nome}, sua senha foi redefinida por um administrador. Escolha uma nova para continuar.</p>
+          <h2 className="titulo text-2xl">Defina uma nova senha</h2>
+          <p className="text-sm text-grafite">{pendente.nome}, sua senha foi redefinida por um administrador. Escolha uma nova para continuar.</p>
           <Campo rotulo={`Nova senha (mín. ${SENHA_MINIMA})`}>
             <Texto tipo="password" valor={troca.nova} mudar={(v) => setTroca({ ...troca, nova: v })} />
           </Campo>
           <Campo rotulo="Confirmar nova senha">
             <Texto tipo="password" valor={troca.confirma} mudar={(v) => setTroca({ ...troca, confirma: v })} />
           </Campo>
-          <button type="submit" className={btnPri} disabled={!troca.nova || ocupado}>
+          <button type="submit" className={`${btnPri} h-11 px-6`} disabled={!troca.nova || ocupado}>
             Salvar e entrar
           </button>
         </form>
       )}
 
-      {erro && <p className="mt-4 rounded bg-red-100 p-3 text-sm text-red-800">{erro}</p>}
+      {erro && <p className="mt-4 rounded-[10px] bg-red-50 p-3 text-sm text-red-800">{erro}</p>}
 
-      <button className="mt-8 text-xs text-zinc-500 underline" onClick={onVoltar}>
-        Voltar e trocar a fonte de dados
+      <button className={`${btnFantasma} mt-10 -ml-3 text-xs`} onClick={onVoltar}>
+        Trocar a fonte de dados
       </button>
-    </main>
+    </Moldura>
   )
 }

@@ -24,20 +24,20 @@ function SeletorCondicoes(p: {
   const alternar = (c: string) =>
     p.mudar(p.marcadas.includes(c) ? p.marcadas.filter((x) => x !== c) : TODAS_CONDICOES.filter((x) => x === c || p.marcadas.includes(x)))
   return (
-    <fieldset className="rounded border border-zinc-200 p-2">
-      <legend className="px-1 text-xs font-semibold">{p.titulo}</legend>
-      <p className="mb-2 text-[11px] text-zinc-500">{p.dica}</p>
+    <fieldset className="rounded-[14px] border border-linha p-4">
+      <legend className="titulo px-1 text-sm">{p.titulo}</legend>
+      <p className="mb-2 text-[11px] text-cinza">{p.dica}</p>
       <div className="grid grid-cols-2 gap-x-3 gap-y-1">
         {TODAS_CONDICOES.map((c) => {
           const k = CONDICOES[c]
           return (
-            <label key={c} className="flex items-center gap-1.5 text-xs">
+            <label key={c} className="cond-opcao flex items-center gap-2 rounded-lg px-1.5 py-1 text-xs">
               <input type="checkbox" checked={p.marcadas.includes(c)} onChange={() => alternar(c)} />
-              <span className="inline-block w-6 rounded text-center" style={{ background: k.cor, color: k.texto, border: '1px solid #ccc' }}>
+              <span className="chip" style={{ background: k.cor, color: k.texto, boxShadow: 'inset 0 0 0 1px rgb(0 0 0 / .08)' }}>
                 {c}
               </span>
               <span className="truncate">{k.nome}</span>
-              {p.contagem[c] ? <span className="ml-auto text-zinc-400">{p.contagem[c]}</span> : null}
+              {p.contagem[c] ? <span className="ml-auto text-cinza">{p.contagem[c]}</span> : null}
             </label>
           )
         })}
@@ -63,11 +63,11 @@ export function PainelRelatorio({ r, atualizar }: { r: Relatorio; atualizar: Atu
   for (const e of r.equipamentos) contagem[e.condicao] = (contagem[e.condicao] ?? 0) + 1
 
   return (
-    <div className="space-y-3 p-3">
-      <div className="grid grid-cols-2 gap-2">
+    <div className="space-y-5 p-5">
+      <div className="grid grid-cols-2 gap-3">
         <Campo rotulo="Usina">
           <select
-            className="w-full rounded border border-zinc-300 px-2 py-1 text-sm"
+            className="campo"
             value={r.usina}
             onChange={(e) => set('usina', e.target.value)}
             disabled={!r.avulso}
@@ -138,14 +138,14 @@ export function PainelRelatorio({ r, atualizar }: { r: Relatorio; atualizar: Atu
         Incluir página de indicadores (execução, anomalias e reincidência)
       </label>
 
-      <div className="rounded border border-zinc-200 bg-white p-2 text-xs">
+      <div className="rounded-[14px] bg-nevoa p-3 text-xs leading-relaxed">
         <b>Histórico: </b>
         {r.historico ? (
           <>
             {Object.keys(r.historico.condicoes).length} de {r.equipamentos.length} equipamentos com medições anteriores · fonte: {r.historico.fonte}
           </>
         ) : (
-          <span className="text-zinc-500">
+          <span className="text-cinza">
             ainda não carregado. Com a pasta conectada ele é lido de todas as planilhas de controle da usina; no modo manual, importe várias
             planilhas de uma vez.
           </span>

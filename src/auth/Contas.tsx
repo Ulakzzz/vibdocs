@@ -16,15 +16,15 @@ import {
 
 function Janela({ titulo, fechar, children }: { titulo: string; fechar: () => void; children: ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 p-6" onMouseDown={fechar}>
-      <div className="max-h-full w-full max-w-2xl overflow-auto rounded bg-white shadow-xl" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b px-4 py-2">
-          <h2 className="font-semibold">{titulo}</h2>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-6 backdrop-blur-[2px]" onMouseDown={fechar}>
+      <div className="surgir max-h-full w-full max-w-2xl overflow-auto rounded-[18px] bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-linha px-5 py-3">
+          <h2 className="titulo text-lg">{titulo}</h2>
           <button className={btnMini} onClick={fechar}>
             fechar
           </button>
         </div>
-        <div className="p-4">{children}</div>
+        <div className="p-5">{children}</div>
       </div>
     </div>
   )
@@ -42,7 +42,7 @@ function useAcao() {
     }
   }
   const aviso = msg && (
-    <p className={`mt-2 rounded p-2 text-sm ${msg.tipo === 'ok' ? 'bg-green-100 text-green-900' : 'bg-red-100 text-red-800'}`}>{msg.texto}</p>
+    <p className={`surgir mt-3 rounded-[10px] p-3 text-sm ${msg.tipo === 'ok' ? 'bg-green-50 text-green-900' : 'bg-red-50 text-red-800'}`}>{msg.texto}</p>
   )
   return { rodar, aviso }
 }
@@ -77,7 +77,7 @@ export function MeuPerfil({
             <Texto tipo="email" valor={p.email} mudar={(v) => setP({ ...p, email: v })} />
           </Campo>
         </div>
-        <p className="text-xs text-zinc-500">Papel: {PAPEIS[usuario.papel]} (só um administrador pode alterar)</p>
+        <p className="text-xs text-cinza">Papel: {PAPEIS[usuario.papel]} (só um administrador pode alterar)</p>
         <button
           className={btnPri}
           onClick={() =>
@@ -142,13 +142,13 @@ export function GerenciarUsuarios({ repo, usuario, fechar }: { repo: RepoUsuario
 
   return (
     <Janela titulo="Usuários" fechar={fechar}>
-      <p className="mb-3 text-xs text-zinc-500">
+      <p className="mb-3 text-xs text-cinza">
         Contas guardadas {repo.onde === 'sharepoint' ? 'em VibDocs/config/usuarios.json no SharePoint' : 'neste navegador'}. Senhas são guardadas
         cifradas (hash).
       </p>
       <table className="w-full border-collapse text-sm">
         <thead>
-          <tr className="bg-zinc-100 text-left text-xs">
+          <tr className="border-b border-linha text-left text-xs text-cinza">
             <th className="p-1">Nome</th>
             <th className="p-1">Papel</th>
             <th className="p-1">Situação</th>
@@ -157,15 +157,15 @@ export function GerenciarUsuarios({ repo, usuario, fechar }: { repo: RepoUsuario
         </thead>
         <tbody>
           {lista.map((u) => (
-            <tr key={u.id} className={`border-b ${u.ativo ? '' : 'text-zinc-400'}`}>
+            <tr key={u.id} className={`linha-viva acoes-no-hover border-b border-linha/70 ${u.ativo ? '' : 'text-cinza'}`}>
               <td className="p-1">
                 {u.nome}
-                {u.id === usuario.id && <span className="ml-1 text-xs text-zinc-400">(você)</span>}
-                <div className="text-xs text-zinc-500">{[u.cargo, u.email].filter(Boolean).join(' · ')}</div>
+                {u.id === usuario.id && <span className="ml-1 text-xs text-cinza">(você)</span>}
+                <div className="text-xs text-cinza">{[u.cargo, u.email].filter(Boolean).join(' · ')}</div>
               </td>
               <td className="p-1">
                 <select
-                  className="rounded border px-1 py-0.5 text-xs"
+                  className="campo w-auto py-1 text-xs"
                   value={u.papel}
                   onChange={(e) => fazer(() => definirPapel(repo, u.id, e.target.value as Papel), `Papel de ${u.nome} alterado.`)}
                 >
@@ -180,7 +180,7 @@ export function GerenciarUsuarios({ repo, usuario, fechar }: { repo: RepoUsuario
                 {u.ativo ? 'ativo' : 'desativado'}
                 {u.trocarSenha && <div className="text-amber-700">troca de senha pendente</div>}
               </td>
-              <td className="p-1 text-right whitespace-nowrap">
+              <td className="p-1 text-right whitespace-nowrap"><span className="acoes">
                 <button
                   className={btnMini}
                   onClick={() => {
@@ -188,14 +188,15 @@ export function GerenciarUsuarios({ repo, usuario, fechar }: { repo: RepoUsuario
                     if (t) fazer(() => redefinirSenha(repo, u.id, t), `Senha de ${u.nome} redefinida. Passe a senha temporária para a pessoa.`)
                   }}
                 >
-                  redefinir senha
+                  Redefinir senha
                 </button>
                 <button
                   className={btnMini + ' ml-1'}
                   onClick={() => fazer(() => definirAtivo(repo, u.id, !u.ativo), `${u.nome}: ${u.ativo ? "conta desativada" : "conta reativada"}.`)}
                 >
-                  {u.ativo ? 'desativar' : 'reativar'}
+                  {u.ativo ? 'Desativar' : 'Reativar'}
                 </button>
+                </span>
               </td>
             </tr>
           ))}

@@ -9,7 +9,7 @@ const navegador = await chromium.launch({ channel: 'msedge' })
 const pagina = await (await navegador.newContext({ acceptDownloads: true })).newPage()
 pagina.on('pageerror', (e) => console.error('erro na página:', e.message))
 await pagina.goto(url)
-await pagina.getByRole('button', { name: /^Anomalias/ }).click()
+await pagina.getByRole('tab', { name: /^Anomalias/ }).click()
 
 // Eixo 01: texto padrão + observação do técnico
 await pagina.locator('select').filter({ hasText: 'falha / texto padrão' }).first().selectOption('folga-rotativa')

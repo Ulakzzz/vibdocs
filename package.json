@@ -9,9 +9,11 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "pdf:teste": "node scripts/pdf-teste.mjs",
-    "word:teste": "node scripts/word-teste.mjs"
+    "word:teste": "node scripts/word-teste.mjs",
+    "livre:teste": "node scripts/livre-teste.mjs"
   },
   "dependencies": {
+    "@fontsource-variable/archivo": "^5.3.0",
     "docx": "^9.16.0",
     "idb-keyval": "^6.3.0",
     "react": "^19.3.1",
