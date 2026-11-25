@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
+import { GerenciarUsuarios, MeuPerfil } from './auth/Contas'
+import { TelaLogin } from './auth/TelaLogin'
 import { btn, btnPri } from './editor/campos'
+import {
+  encerrarSessao,
+  PAPEIS,
+  repoNavegador,
+  repoPasta,
+  retomarSessao,
+  type Usuario,
+} from './lib/usuarios'
 import { PainelAnomalias } from './editor/PainelAnomalias'
 import { PainelEquipamentos } from './editor/PainelEquipamentos'
 import { PainelRelatorio } from './editor/PainelRelatorio'
@@ -24,6 +34,22 @@ type Estado = 'salvo' | 'salvando' | 'pendente' | 'erro'
 
 const mesAtual = () => hojeISO().slice(0, 7)
 
+const FONTE_DEMO = 'demonstração (dados fictícios)'
+const USUARIO_DEMO: Usuario = {
+  id: 'demo',
+  nome: 'Usuário de demonstração',
+  email: '',
+  cargo: '',
+  papel: 'tecnico',
+  ativo: true,
+  salt: '',
+  hash: '',
+  iteracoes: 0,
+  trocarSenha: false,
+  criadoEm: '',
+  atualizadoEm: '',
+}
+
 export default function App() {
   // ---------- fonte dos dados ----------
   const [raiz, setRaiz] = useState<FileSystemDirectoryHandle>()
@@ -37,7 +63,15 @@ export default function App() {
   const [mes, setMes] = useState('') // "AAAA/MM-Mês" (pasta do SharePoint)
   const [linhas, setLinhas] = useState<LinhaControle[]>([])
   const [sigla, setSigla] = useState('')
-  const [analista, setAnalista] = useState(() => localStorage.getItem('vibdocs.analista') ?? '')
+
+  // ---------- conta ----------
+  const repo = useMemo(() => (raiz ? repoPasta(raiz) : fonteManual ? repoNavegador() : undefined), [raiz, fonteManual])
+  const [usuario, setUsuario] = useState<Usuario>()
+  const [sessaoVerificada, setSessaoVerificada] = useState(false)
+  const [janela, setJanela] = useState<'perfil' | 'usuarios'>()
+  const analista = usuario?.nome ?? ''
+  const usuarioRef = useRef(analista)
+  usuarioRef.current = analista
 
   // ---------- relatório em edição ----------
   const [rel, setRel] = useState<Relatorio>()
@@ -50,10 +84,27 @@ export default function App() {
 
   useEffect(() => {
     pastaLembrada().then(setLembrada)
-    if (new URLSearchParams(location.search).has('demo')) carregarManual('demonstração (dados fictícios)', linhasDemo())
+    if (new URLSearchParams(location.search).has('demo')) carregarManual(FONTE_DEMO, linhasDemo())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  useEffect(() => localStorage.setItem('vibdocs.analista', analista), [analista])
+
+  // Retoma a sessão salva quando a fonte de dados (e, portanto, o cadastro de contas) fica disponível.
+  useEffect(() => {
+    setUsuario(undefined)
+    setSessaoVerificada(false)
+    if (!repo) return
+    if (fonteManual === FONTE_DEMO) {
+      // Demonstração: só dados fictícios, sem conta real.
+      setUsuario(USUARIO_DEMO)
+      setSessaoVerificada(true)
+      return
+    }
+    retomarSessao(repo)
+      .then(setUsuario)
+      .catch(() => undefined)
+      .finally(() => setSessaoVerificada(true))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repo])
 
   const executar = useCallback(async (f: () => Promise<void>) => {
     setErro('')
@@ -132,13 +183,15 @@ export default function App() {
 
   const atualizar = useCallback((f: (r: Relatorio) => Relatorio) => {
     sujo.current = true
-    setRel((r) => (r ? normalizar({ ...f(r), atualizadoEm: new Date().toISOString() }) : r))
+    setRel((r) =>
+      r ? normalizar({ ...f(r), atualizadoEm: new Date().toISOString(), atualizadoPor: usuarioRef.current || r.atualizadoPor }) : r,
+    )
   }, [])
 
   // Abre (ou cria) o relatório da área selecionada.
   const relAvulso = !!rel?.avulso
   useEffect(() => {
-    if (relAvulso || !sigla || !linhas.length) return
+    if (!usuario || relAvulso || !sigla || !linhas.length) return
     let cancelado = false
     executar(async () => {
       if (rel && sujo.current) await salvar(rel)
@@ -160,7 +213,7 @@ export default function App() {
       cancelado = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [usina, mesRef, sigla, linhas, raiz, relAvulso])
+  }, [usina, mesRef, sigla, linhas, raiz, relAvulso, usuario?.id])
 
   const fecharAvulso = () =>
     executar(async () => {
@@ -211,6 +264,16 @@ export default function App() {
       setFonteManual(undefined)
       setLinhas([])
       setRel(undefined)
+    })
+
+  const sairDaConta = () =>
+    executar(async () => {
+      if (rel && sujo.current) await salvar(rel)
+      sujo.current = false
+      encerrarSessao()
+      setUsuario(undefined)
+      setRel(undefined)
+      setJanela(undefined)
     })
 
   const baixarRascunho = () => {
@@ -267,13 +330,29 @@ export default function App() {
               Importar planilha de controle (.xlsx)
               <input type="file" accept=".xlsx" className="hidden" onChange={(e) => importarXlsx(e.target.files?.[0])} />
             </label>
-            <button className={btn} onClick={() => carregarManual('demonstração (dados fictícios)', linhasDemo())}>
+            <button className={btn} onClick={() => carregarManual(FONTE_DEMO, linhasDemo())}>
               Ver demonstração
             </button>
           </div>
         </div>
         {erro && <p className="mt-4 rounded bg-red-100 p-3 text-sm text-red-800">{erro}</p>}
       </main>
+    )
+  }
+
+  // ---------- login ----------
+  if (repo && !usuario) {
+    if (!sessaoVerificada) return <p className="p-8 text-sm text-zinc-500">Verificando sessão…</p>
+    return (
+      <TelaLogin
+        repo={repo}
+        onEntrar={(u) => setUsuario(u)}
+        onVoltar={() => {
+          setRaiz(undefined)
+          setFonteManual(undefined)
+          setLinhas([])
+        }}
+      />
     )
   }
 
@@ -326,13 +405,6 @@ export default function App() {
               )}
             </>
           )}
-          <input
-            className="w-44 rounded border px-2 py-1"
-            placeholder="Seu nome (analista)"
-            value={analista}
-            onChange={(e) => setAnalista(e.target.value)}
-            title="Usado como equipe técnica nos relatórios novos"
-          />
           <button className={btn} onClick={novoAvulso} title="Relatório para qualquer usina/área, fora da planilha de controle">
             + Avulso
           </button>
@@ -349,11 +421,45 @@ export default function App() {
             <button className={btnPri} onClick={() => window.print()} disabled={!rel}>
               Exportar PDF
             </button>
-            <button className={btn} title="Sair / trocar de pasta" onClick={sair}>
-              ⏏
-            </button>
+            {usuario && (
+              <details className="relative">
+                <summary className={btn + ' cursor-pointer list-none'} title="Minha conta">
+                  👤 {usuario.nome}
+                </summary>
+                <div className="absolute right-0 z-40 mt-1 w-56 rounded border bg-white p-1 text-sm shadow-lg">
+                  <div className="border-b px-2 py-1 text-xs text-zinc-500">
+                    {PAPEIS[usuario.papel]}
+                    {usuario.cargo ? ` · ${usuario.cargo}` : ''}
+                  </div>
+                  {usuario.id !== USUARIO_DEMO.id && (
+                    <>
+                      <button className="block w-full rounded px-2 py-1 text-left hover:bg-zinc-100" onClick={() => setJanela('perfil')}>
+                        Meu perfil
+                      </button>
+                      {usuario.papel === 'admin' && (
+                        <button className="block w-full rounded px-2 py-1 text-left hover:bg-zinc-100" onClick={() => setJanela('usuarios')}>
+                          Usuários
+                        </button>
+                      )}
+                      <button className="block w-full rounded px-2 py-1 text-left hover:bg-zinc-100" onClick={sairDaConta}>
+                        Sair da conta
+                      </button>
+                    </>
+                  )}
+                  <button className="block w-full rounded px-2 py-1 text-left text-zinc-500 hover:bg-zinc-100" onClick={sair}>
+                    Trocar fonte de dados
+                  </button>
+                </div>
+              </details>
+            )}
           </div>
         </header>
+        {janela === 'perfil' && usuario && repo && (
+          <MeuPerfil repo={repo} usuario={usuario} mudou={setUsuario} fechar={() => setJanela(undefined)} />
+        )}
+        {janela === 'usuarios' && usuario && repo && (
+          <GerenciarUsuarios repo={repo} usuario={usuario} fechar={() => setJanela(undefined)} />
+        )}
         {erro && <p className="bg-red-100 px-3 py-2 text-sm text-red-800">{erro}</p>}
 
         {!rel ? (

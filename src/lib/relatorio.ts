@@ -66,6 +66,8 @@ export interface Relatorio {
   anomalias: Record<string, Anomalia> // por Local de instalação (o texto não se perde ao desmarcar)
   criadoEm: string
   atualizadoEm: string
+  criadoPor?: string // nome do usuário logado
+  atualizadoPor?: string
 }
 
 export const TODAS_CONDICOES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', 'X', 'R']
@@ -159,6 +161,8 @@ export function novoRelatorio(p: {
     anomalias: {},
     criadoEm: agora,
     atualizadoEm: agora,
+    criadoPor: p.analista,
+    atualizadoPor: p.analista,
   }
 }
 
