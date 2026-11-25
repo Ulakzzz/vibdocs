@@ -1,6 +1,7 @@
 // Modelo do documento do relatório (um JSON por relatório) e regras automáticas.
 // Tudo que é automático pode ser editado depois pelo técnico.
 import { siglaArea, type LinhaControle } from './controle'
+import { mesCurto, mesesDoQuadro, reincidenteDesde, type Historico } from './historico'
 
 export const USINAS_RELATORIO = ['Barreiro', 'Jeceaba', 'Mineração', 'Florestal'] as const
 
@@ -68,6 +69,10 @@ export interface Relatorio {
   atualizadoEm: string
   criadoPor?: string // nome do usuário logado
   atualizadoPor?: string
+  /** Quantos meses o quadro de condição mostra (incluindo o do relatório). */
+  mesesNoQuadro?: number
+  /** Cópia do histórico só dos equipamentos deste relatório (meses anteriores ao de referência). */
+  historico?: { condicoes: Historico; fonte: string; atualizadoEm: string }
 }
 
 export const TODAS_CONDICOES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', 'X', 'R']
@@ -177,6 +182,38 @@ export const anomaliaDe = (r: Relatorio, e: EquipRel): Anomalia => r.anomalias[e
 
 /** Texto final de um eixo: padrão + o que o técnico escreveu. */
 export const juntar = (...partes: string[]) => partes.map((p) => p.trim()).filter(Boolean).join(' ')
+
+// ---------- histórico ----------
+export const MESES_QUADRO_PADRAO = 3
+
+/** Guarda no relatório o histórico dos seus equipamentos (só meses anteriores ao de referência). */
+export function aplicarHistorico(r: Relatorio, h: Historico, fonte: string): Relatorio {
+  const condicoes: Historico = {}
+  for (const e of r.equipamentos) {
+    const porMes = Object.fromEntries(Object.entries(h[e.local] ?? {}).filter(([m]) => m < r.mesReferencia))
+    if (Object.keys(porMes).length) condicoes[e.local] = porMes
+  }
+  return { ...r, historico: { condicoes, fonte, atualizadoEm: new Date().toISOString() } }
+}
+
+export const mesmoHistorico = (a?: Historico, b?: Historico) => JSON.stringify(a ?? {}) === JSON.stringify(b ?? {})
+
+/** Meses (colunas) do quadro de condição. */
+export const colunasQuadro = (r: Relatorio) =>
+  mesesDoQuadro(r.historico?.condicoes ?? {}, equipamentosQuadro(r).map((e) => e.local), r.mesReferencia, r.mesesNoQuadro ?? MESES_QUADRO_PADRAO)
+
+/** Condição de um equipamento num mês do quadro (o mês do relatório usa a condição atual, editável). */
+export const condicaoNoMes = (r: Relatorio, e: EquipRel, mes: string) =>
+  mes === r.mesReferencia ? e.condicao : (r.historico?.condicoes[e.local]?.[mes] ?? '')
+
+/** "Reincidente desde" calculado pelo histórico (ex.: "nov/25"). */
+export function reincidenciaAuto(r: Relatorio, e: EquipRel): string | undefined {
+  const m = reincidenteDesde(r.historico?.condicoes[e.local], r.mesReferencia, e.condicao, r.condicoesAnomalia)
+  return m && m < r.mesReferencia ? mesCurto(m) : undefined // só é reincidente se começou antes deste mês
+}
+
+/** O que sai no relatório: o valor digitado pelo técnico tem prioridade sobre o automático. */
+export const reincidenciaFinal = (r: Relatorio, e: EquipRel, a: Anomalia) => a.reincidenteDesde || reincidenciaAuto(r, e) || ''
 
 /** Recalcula o que é automático, respeitando o que o técnico editou. */
 export function normalizar(r: Relatorio): Relatorio {

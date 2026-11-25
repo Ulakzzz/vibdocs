@@ -2,6 +2,7 @@
 import { CONDICOES } from '../lib/condicao'
 import {
   gerarCodigo,
+  MESES_QUADRO_PADRAO,
   PADRAO_ANOMALIA,
   PADRAO_QUADRO,
   TODAS_CONDICOES,
@@ -119,6 +120,27 @@ export function PainelRelatorio({ r, atualizar }: { r: Relatorio; atualizar: Atu
         <Campo rotulo="Técnico da análise">
           <Texto valor={r.equipe.analise} mudar={(v) => set('equipe', { ...r.equipe, analise: v })} />
         </Campo>
+        <Campo rotulo="Meses no quadro de condição" dica="Inclui o mês do relatório. Os anteriores vêm do histórico.">
+          <Texto
+            tipo="number"
+            valor={String(r.mesesNoQuadro ?? MESES_QUADRO_PADRAO)}
+            mudar={(v) => set('mesesNoQuadro', Math.min(12, Math.max(1, Number(v) || 1)))}
+          />
+        </Campo>
+      </div>
+
+      <div className="rounded border border-zinc-200 bg-white p-2 text-xs">
+        <b>Histórico: </b>
+        {r.historico ? (
+          <>
+            {Object.keys(r.historico.condicoes).length} de {r.equipamentos.length} equipamentos com medições anteriores · fonte: {r.historico.fonte}
+          </>
+        ) : (
+          <span className="text-zinc-500">
+            ainda não carregado. Com a pasta conectada ele é lido de todas as planilhas de controle da usina; no modo manual, importe várias
+            planilhas de uma vez.
+          </span>
+        )}
       </div>
 
       <SeletorCondicoes

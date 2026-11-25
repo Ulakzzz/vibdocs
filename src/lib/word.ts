@@ -21,9 +21,13 @@ import {
 } from 'docx'
 import { CONDICOES, severidade } from './condicao'
 import { blobImagem } from './imagens'
+import { mesCurto } from './historico'
 import {
   anomaliaDe,
+  colunasQuadro,
+  condicaoNoMes,
   dataPorExtenso,
+  reincidenciaFinal,
   equipamentosAnomalia,
   equipamentosQuadro,
   juntar,
@@ -159,24 +163,30 @@ function rodape(r: Relatorio) {
 function quadro(r: Relatorio): (Paragraph | Table)[] {
   const eqs = equipamentosQuadro(r)
   if (!eqs.length) return [p([t('Nenhum equipamento com as condições selecionadas.', { color: '777777' })])]
-  const larg = [Math.round(UTIL * 0.36), Math.round(UTIL * 0.52), UTIL - Math.round(UTIL * 0.36) - Math.round(UTIL * 0.52)]
-  const mesTitulo = r.mesReferencia.split('-').reverse().join('/')
-  const cab = ['Local de instalação', 'Descrição', mesTitulo].map((h, i) =>
+  const meses = colunasQuadro(r)
+  const lMes = 760
+  const lLocal = Math.round((UTIL - lMes * meses.length) * 0.42)
+  const larg = [lLocal, UTIL - lMes * meses.length - lLocal, ...meses.map(() => lMes)]
+  const cab = ['Local de instalação', 'Descrição', ...meses.map(mesCurto)].map((h, i) =>
     celula([p([t(h, { bold: true, size: 16, color: 'FFFFFF' })], { align: AlignmentType.CENTER, depois: 0 })], { largura: larg[i], fundo: '#002060' }),
   )
-  const linhas = eqs.map((e) => {
-    const k = CONDICOES[e.condicao] ?? CONDICOES.X
-    return new TableRow({
-      children: [
-        celula([p([t(e.local, { size: 16 })], { depois: 0 })], { largura: larg[0] }),
-        celula([p([t(e.descricao, { size: 16 })], { depois: 0 })], { largura: larg[1] }),
-        celula([p([t(e.condicao || '–', { size: 16, color: hex(k.texto) })], { align: AlignmentType.CENTER, depois: 0 })], {
-          largura: larg[2],
-          fundo: k.cor,
-        }),
-      ],
-    })
-  })
+  const linhas = eqs.map(
+    (e) =>
+      new TableRow({
+        children: [
+          celula([p([t(e.local, { size: 16 })], { depois: 0 })], { largura: larg[0] }),
+          celula([p([t(e.descricao, { size: 16 })], { depois: 0 })], { largura: larg[1] }),
+          ...meses.map((m, i) => {
+            const c = condicaoNoMes(r, e, m)
+            const k = CONDICOES[c] ?? CONDICOES.X
+            return celula([p([t(c, { size: 16, color: hex(k.texto) })], { align: AlignmentType.CENTER, depois: 0 })], {
+              largura: larg[2 + i],
+              fundo: k.cor,
+            })
+          }),
+        ],
+      }),
+  )
   return [
     new Table({
       width: { size: UTIL, type: WidthType.DXA },
@@ -213,7 +223,7 @@ async function paginaAnomalia(r: Relatorio, local: string): Promise<(Paragraph |
     ['Equipamento', a.equipamento || e.descricao],
     ['Local de instalação', e.local],
     ['Data', a.dataMedicao || '—'],
-    ['Reincidente desde', a.reincidenteDesde || '—'],
+    ['Reincidente desde', reincidenciaFinal(r, e, a) || '—'],
     ['Notas PR', a.notasPR || '—'],
   ].map(([k, v]) => p([t(`${k}: ${v}`, { bold: true, size: 20 })], { depois: 30 }))
 

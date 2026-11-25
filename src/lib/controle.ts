@@ -42,6 +42,18 @@ export async function mesesDisponiveis(raiz: FileSystemDirectoryHandle, usina: U
   return out
 }
 
+/** Todas as planilhas de controle da usina, de todos os anos: [{ mesRef: "AAAA-MM", arquivo }]. */
+export async function listarPlanilhas(raiz: FileSystemDirectoryHandle, usina: Usina) {
+  const meses = await mesesDisponiveis(raiz, usina)
+  const out: { mesRef: string; arquivo: FileSystemFileHandle }[] = []
+  for (const [ano, pastas] of Object.entries(meses))
+    for (const mesPasta of pastas) {
+      const { arquivo } = await localizarPlanilha(raiz, usina, ano, mesPasta)
+      out.push({ mesRef: `${ano}-${mesPasta.slice(0, 2)}`, arquivo })
+    }
+  return out.sort((a, b) => a.mesRef.localeCompare(b.mesRef))
+}
+
 export async function localizarPlanilha(
   raiz: FileSystemDirectoryHandle,
   usina: Usina,

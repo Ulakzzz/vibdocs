@@ -1,11 +1,13 @@
 // Editor das páginas de anomalia: cabeçalho, eixos (texto padrão + texto do técnico) e imagens.
 import { useEffect, useRef, useState } from 'react'
 import { CONDICOES } from '../lib/condicao'
+import { mesCurto } from '../lib/historico'
 import { guardarImagem, urlImagem } from '../lib/imagens'
 import {
   anomaliaDe,
   equipamentosAnomalia,
   novoEixo,
+  reincidenciaAuto,
   SLOTS,
   type Anomalia,
   type EquipRel,
@@ -84,6 +86,7 @@ function EditorAnomalia({ r, e, atualizar }: { r: Relatorio; e: EquipRel; atuali
         <div className="text-xs text-zinc-500">
           Condição {e.condicao} – {CONDICOES[e.condicao]?.nome}
         </div>
+        <LinhaDoTempo r={r} e={e} />
       </div>
 
       <div className="grid grid-cols-2 gap-2">
@@ -93,8 +96,21 @@ function EditorAnomalia({ r, e, atualizar }: { r: Relatorio; e: EquipRel; atuali
         <Campo rotulo="Data da medição">
           <Texto valor={a.dataMedicao} placeholder="dd/mm/aa" mudar={(v) => mudar((an) => ({ ...an, dataMedicao: v }))} />
         </Campo>
-        <Campo rotulo="Reincidente desde" dica="Automático pelo histórico numa próxima etapa; por enquanto manual.">
-          <Texto valor={a.reincidenteDesde} placeholder="dd/mm/aa" mudar={(v) => mudar((an) => ({ ...an, reincidenteDesde: v }))} />
+        <Campo
+          rotulo="Reincidente desde"
+          dica={
+            reincidenciaAuto(r, e)
+              ? `Automático: ${reincidenciaAuto(r, e)} (pelo histórico). Digite para substituir.`
+              : r.historico
+                ? 'Sem anomalia em sequência nos meses anteriores. Digite se quiser informar.'
+                : 'Histórico não carregado: informe manualmente.'
+          }
+        >
+          <Texto
+            valor={a.reincidenteDesde}
+            placeholder={reincidenciaAuto(r, e) ?? 'dd/mm/aa'}
+            mudar={(v) => mudar((an) => ({ ...an, reincidenteDesde: v }))}
+          />
         </Campo>
         <Campo rotulo="Notas PR">
           <Texto valor={a.notasPR} mudar={(v) => mudar((an) => ({ ...an, notasPR: v }))} />
@@ -191,6 +207,30 @@ function EditorAnomalia({ r, e, atualizar }: { r: Relatorio; e: EquipRel; atuali
       </section>
 
       <Imagens imagens={a.imagens} mudar={(imgs) => mudar((an) => ({ ...an, imagens: imgs }))} />
+    </div>
+  )
+}
+
+/** Condição do equipamento mês a mês (histórico + mês do relatório). */
+function LinhaDoTempo({ r, e }: { r: Relatorio; e: EquipRel }) {
+  const meses = { ...(r.historico?.condicoes[e.local] ?? {}), [r.mesReferencia]: e.condicao }
+  const lista = Object.entries(meses)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-12)
+  if (lista.length < 2) return null
+  return (
+    <div className="mt-2 flex flex-wrap items-end gap-1" title="Condição nas últimas medições">
+      {lista.map(([m, c]) => {
+        const k = CONDICOES[c] ?? CONDICOES.X
+        return (
+          <div key={m} className="text-center">
+            <div className="h-5 w-9 rounded text-xs leading-5" style={{ background: k.cor, color: k.texto }} title={k.nome}>
+              {c}
+            </div>
+            <div className={`text-[10px] ${m === r.mesReferencia ? 'font-bold' : 'text-zinc-500'}`}>{mesCurto(m)}</div>
+          </div>
+        )
+      })}
     </div>
   )
 }

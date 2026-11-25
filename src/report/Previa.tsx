@@ -2,9 +2,13 @@
 import { useEffect, useState } from 'react'
 import { CONDICOES, severidade } from '../lib/condicao'
 import { urlImagem } from '../lib/imagens'
+import { mesCurto } from '../lib/historico'
 import {
   anomaliaDe,
+  colunasQuadro,
+  condicaoNoMes,
   dataPorExtenso,
+  reincidenciaFinal,
   equipamentosAnomalia,
   equipamentosQuadro,
   juntar,
@@ -30,7 +34,7 @@ function Celula({ c }: { c: string }) {
   const k = CONDICOES[c] ?? CONDICOES.X
   return (
     <td className="border border-black text-center" style={{ background: k.cor, color: k.texto }}>
-      {c || '–'}
+      {c}
     </td>
   )
 }
@@ -71,7 +75,7 @@ function Espaco({ slot, imagens, rotulo, classe }: { slot: Slot; imagens: Imagem
 export function Previa({ r }: { r: Relatorio }) {
   const quadro = equipamentosQuadro(r)
   const anomalias = equipamentosAnomalia(r)
-  const mesTitulo = r.mesReferencia.split('-').reverse().join('/')
+  const colunas = colunasQuadro(r)
 
   return (
     <div className="previa">
@@ -101,7 +105,11 @@ export function Previa({ r }: { r: Relatorio }) {
               <tr className="bg-[#002060] text-white">
                 <th className="border border-black px-1">Local de instalação</th>
                 <th className="border border-black px-1">Descrição</th>
-                <th className="w-14 border border-black px-1">{mesTitulo}</th>
+                {colunas.map((m) => (
+                  <th key={m} className="w-12 border border-black px-1">
+                    {mesCurto(m)}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -109,7 +117,9 @@ export function Previa({ r }: { r: Relatorio }) {
                 <tr key={e.local}>
                   <td className="border border-black px-1">{e.local}</td>
                   <td className="border border-black px-1">{e.descricao}</td>
-                  <Celula c={e.condicao} />
+                  {colunas.map((m) => (
+                    <Celula key={m} c={condicaoNoMes(r, e, m)} />
+                  ))}
                 </tr>
               ))}
             </tbody>
@@ -148,7 +158,7 @@ export function Previa({ r }: { r: Relatorio }) {
                 <div>Equipamento: {a.equipamento || e.descricao}</div>
                 <div>Local de instalação: {e.local}</div>
                 <div>Data: {a.dataMedicao || '—'}</div>
-                <div>Reincidente desde: {a.reincidenteDesde || '—'}</div>
+                <div>Reincidente desde: {reincidenciaFinal(r, e, a) || '—'}</div>
                 <div>Notas PR: {a.notasPR || '—'}</div>
               </div>
               <table className="h-fit text-[10px]">

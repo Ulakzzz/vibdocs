@@ -23,10 +23,11 @@ import {
   USINAS,
   type LinhaControle,
 } from './lib/controle'
-import { linhasDemo } from './lib/demo'
+import { historicoDemo, linhasDemo } from './lib/demo'
+import { carregarHistoricoPasta, mesDoNome, montarHistorico, type FonteHistorico, type Historico } from './lib/historico'
 import { escolherPasta, esquecerPasta, navegadorSuportado, pastaLembrada, reconectar } from './lib/pasta'
 import { lerDaPasta, lerLocal, maisRecente, proximaSequencia, salvarEmitido, salvarLocal, salvarNaPasta } from './lib/rascunho'
-import { equipamentosAnomalia, hojeISO, normalizar, novoRelatorio, type Relatorio } from './lib/relatorio'
+import { aplicarHistorico, equipamentosAnomalia, hojeISO, mesmoHistorico, normalizar, novoRelatorio, type Relatorio } from './lib/relatorio'
 import { Previa } from './report/Previa'
 
 type Aba = 'relatorio' | 'equipamentos' | 'anomalias'
@@ -62,6 +63,10 @@ export default function App() {
   const [meses, setMeses] = useState<Record<string, string[]>>({})
   const [mes, setMes] = useState('') // "AAAA/MM-Mês" (pasta do SharePoint)
   const [linhas, setLinhas] = useState<LinhaControle[]>([])
+  const [mesManual, setMesManual] = useState<string>() // AAAA-MM do modo manual/demonstração
+  // ---------- histórico ----------
+  const [hist, setHist] = useState<{ historico: Historico; fonte: string }>()
+  const [carregandoHist, setCarregandoHist] = useState('')
   const [sigla, setSigla] = useState('')
 
   // ---------- conta ----------
@@ -84,7 +89,7 @@ export default function App() {
 
   useEffect(() => {
     pastaLembrada().then(setLembrada)
-    if (new URLSearchParams(location.search).has('demo')) carregarManual(FONTE_DEMO, linhasDemo())
+    if (new URLSearchParams(location.search).has('demo')) abrirDemo()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -115,7 +120,26 @@ export default function App() {
     }
   }, [])
 
-  const mesRef = raiz && mes ? `${mes.split('/')[0]}-${mes.split('/')[1].slice(0, 2)}` : mesAtual()
+  const mesRef = raiz && mes ? `${mes.split('/')[0]}-${mes.split('/')[1].slice(0, 2)}` : (mesManual ?? mesAtual())
+
+  // Pasta conectada: histórico de todas as planilhas de controle da usina (com cache no navegador).
+  useEffect(() => {
+    if (!raiz || !usuario) return
+    let cancelado = false
+    setHist(undefined)
+    setCarregandoHist('lendo histórico…')
+    carregarHistoricoPasta(raiz, usina as (typeof USINAS)[number], (f, t) => !cancelado && setCarregandoHist(`histórico ${f}/${t}`))
+      .then(({ historico, meses: ms, falhas }) => {
+        if (cancelado) return
+        setHist({ historico, fonte: `${ms.length} planilhas de controle de ${usina}` })
+        setCarregandoHist(falhas.length ? `histórico: ${falhas.length} planilha(s) não lida(s)` : '')
+        if (falhas.length) console.warn('Planilhas não lidas no histórico:', falhas)
+      })
+      .catch((e) => !cancelado && setCarregandoHist(`histórico indisponível: ${(e as Error).message}`))
+    return () => {
+      cancelado = true
+    }
+  }, [raiz, usina, usuario])
 
   // Pasta conectada: meses disponíveis da usina.
   useEffect(() => {
@@ -188,6 +212,15 @@ export default function App() {
     )
   }, [])
 
+  // Mantém a cópia do histórico do relatório em dia (só grava se mudou).
+  useEffect(() => {
+    if (!rel || !hist) return
+    const novo = aplicarHistorico(rel, hist.historico, hist.fonte)
+    if (mesmoHistorico(novo.historico?.condicoes, rel.historico?.condicoes)) return
+    sujo.current = true
+    setRel(novo)
+  }, [rel, hist])
+
   // Abre (ou cria) o relatório da área selecionada.
   const relAvulso = !!rel?.avulso
   useEffect(() => {
@@ -224,16 +257,34 @@ export default function App() {
     })
 
   // ---------- ações ----------
-  function carregarManual(nome: string, l: LinhaControle[]) {
+  function carregarManual(nome: string, l: LinhaControle[], mes?: string, historico?: FonteHistorico[]) {
     setLinhas(l)
     setSigla([...new Set(l.map((x) => siglaArea(x.local)))].sort()[0] ?? '')
     setFonteManual(nome)
+    setMesManual(mes)
+    setHist(historico?.length ? { historico: montarHistorico(historico), fonte: nome } : undefined)
   }
 
-  const importarXlsx = (arquivo?: File) =>
+  /** Modo manual: uma ou várias planilhas. A mais recente vira o mês do relatório; as outras, histórico. */
+  const importarXlsx = (arquivos: File[]) =>
     executar(async () => {
-      if (arquivo) carregarManual(arquivo.name, await lerArquivoVibracao(arquivo))
+      if (!arquivos.length) return
+      const fontes: FonteHistorico[] = []
+      for (const a of arquivos) {
+        const linhas = await lerArquivoVibracao(a)
+        fontes.push({ mesRef: mesDoNome(a.name) ?? mesAtual(), nome: a.name, linhas })
+      }
+      fontes.sort((x, y) => x.mesRef.localeCompare(y.mesRef))
+      const atual = fontes.at(-1)!
+      const linhasAtuais = (await lerArquivoVibracao(arquivos.find((a) => a.name === atual.nome)!)) as LinhaControle[]
+      const nome = arquivos.length === 1 ? atual.nome : `${arquivos.length} planilhas importadas`
+      carregarManual(nome, linhasAtuais, atual.mesRef, fontes.slice(0, -1))
     })
+
+  const abrirDemo = () => {
+    const mes = mesAtual()
+    carregarManual(FONTE_DEMO, linhasDemo(), mes, historicoDemo(mes))
+  }
 
   const novoAvulso = () =>
     executar(async () => {
@@ -349,9 +400,9 @@ export default function App() {
             </select>
             <label className={btn + ' cursor-pointer'}>
               Importar planilha de controle (.xlsx)
-              <input type="file" accept=".xlsx" className="hidden" onChange={(e) => importarXlsx(e.target.files?.[0])} />
+              <input type="file" accept=".xlsx" multiple className="hidden" onChange={(e) => importarXlsx([...(e.target.files ?? [])])} />
             </label>
-            <button className={btn} onClick={() => carregarManual(FONTE_DEMO, linhasDemo())}>
+            <button className={btn} onClick={abrirDemo}>
               Ver demonstração
             </button>
           </div>
@@ -430,6 +481,7 @@ export default function App() {
             + Avulso
           </button>
           <div className="ml-auto flex items-center gap-2">
+            {carregandoHist && <span className="text-xs text-amber-700">{carregandoHist}</span>}
             <span className={`text-xs ${estado === 'erro' ? 'text-red-700' : 'text-zinc-500'}`}>{textoEstado}</span>
             {rel && !raiz && (
               <button className={btn} onClick={baixarRascunho} title="Sem pasta conectada: baixe o rascunho para guardar no SharePoint">
