@@ -65,6 +65,17 @@ export async function lerDaPasta(raiz: FileSystemDirectoryHandle, usina: string,
   }
 }
 
+/** Grava um arquivo emitido (Word/PDF) em VibDocs/emitidos/{Usina}/{AAAA}/{MM}/ e devolve o caminho relativo. */
+export async function salvarEmitido(raiz: FileSystemDirectoryHandle, r: Relatorio, nome: string, conteudo: Blob) {
+  const [aaaa, mm] = r.mesReferencia.split('-')
+  const partes = [PASTA_VIBDOCS, 'emitidos', r.usina, aaaa, mm]
+  const dir = await subpasta(raiz, partes, true)
+  const w = await (await dir.getFileHandle(nome, { create: true })).createWritable()
+  await w.write(conteudo)
+  await w.close()
+  return [...partes, nome].join('\\')
+}
+
 /** Próxima sequência do mês na usina = quantidade de áreas com rascunho no mês + 1. */
 export async function proximaSequencia(raiz: FileSystemDirectoryHandle, usina: string, mesRef: string) {
   try {

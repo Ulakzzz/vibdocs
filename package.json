@@ -8,9 +8,11 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "pdf:teste": "node scripts/pdf-teste.mjs"
+    "pdf:teste": "node scripts/pdf-teste.mjs",
+    "word:teste": "node scripts/word-teste.mjs"
   },
   "dependencies": {
+    "docx": "^9.16.0",
     "idb-keyval": "^6.3.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

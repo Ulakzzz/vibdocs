@@ -25,7 +25,7 @@ import {
 } from './lib/controle'
 import { linhasDemo } from './lib/demo'
 import { escolherPasta, esquecerPasta, navegadorSuportado, pastaLembrada, reconectar } from './lib/pasta'
-import { lerDaPasta, lerLocal, maisRecente, proximaSequencia, salvarLocal, salvarNaPasta } from './lib/rascunho'
+import { lerDaPasta, lerLocal, maisRecente, proximaSequencia, salvarEmitido, salvarLocal, salvarNaPasta } from './lib/rascunho'
 import { equipamentosAnomalia, hojeISO, normalizar, novoRelatorio, type Relatorio } from './lib/relatorio'
 import { Previa } from './report/Previa'
 
@@ -276,14 +276,35 @@ export default function App() {
       setJanela(undefined)
     })
 
-  const baixarRascunho = () => {
-    if (!rel) return
+  const baixar = (blob: Blob, nome: string) => {
     const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(rel, null, 2)], { type: 'application/json' }))
-    a.download = `${rel.codigo}.json`
+    a.href = URL.createObjectURL(blob)
+    a.download = nome
     a.click()
-    URL.revokeObjectURL(a.href)
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
   }
+
+  const baixarRascunho = () => {
+    if (rel) baixar(new Blob([JSON.stringify(rel, null, 2)], { type: 'application/json' }), `${rel.codigo}.json`)
+  }
+
+  const [gerandoWord, setGerandoWord] = useState(false)
+  const [aviso, setAviso] = useState('')
+  const exportarWord = () =>
+    executar(async () => {
+      if (!rel) return
+      setGerandoWord(true)
+      setAviso('')
+      try {
+        const { gerarWord, nomeArquivo } = await import('./lib/word') // carregado só quando usado
+        const blob = await gerarWord(rel)
+        const nome = nomeArquivo(rel, 'docx')
+        baixar(blob, nome)
+        if (raiz) setAviso(`Word salvo também no SharePoint: ${await salvarEmitido(raiz, rel, nome, blob)}`)
+      } finally {
+        setGerandoWord(false)
+      }
+    })
 
   // ---------- tela de entrada ----------
   if (!raiz && !fonteManual) {
@@ -418,6 +439,9 @@ export default function App() {
             <button className={btn} onClick={() => setPreviaAberta((v) => !v)}>
               {previaAberta ? 'Fechar prévia' : 'Abrir prévia'}
             </button>
+            <button className={btn} onClick={exportarWord} disabled={!rel || gerandoWord}>
+              {gerandoWord ? 'Gerando Word…' : 'Exportar Word'}
+            </button>
             <button className={btnPri} onClick={() => window.print()} disabled={!rel}>
               Exportar PDF
             </button>
@@ -461,6 +485,14 @@ export default function App() {
           <GerenciarUsuarios repo={repo} usuario={usuario} fechar={() => setJanela(undefined)} />
         )}
         {erro && <p className="bg-red-100 px-3 py-2 text-sm text-red-800">{erro}</p>}
+        {aviso && (
+          <p className="flex items-center bg-green-100 px-3 py-2 text-sm text-green-900">
+            {aviso}
+            <button className="ml-auto text-xs underline" onClick={() => setAviso('')}>
+              ok
+            </button>
+          </p>
+        )}
 
         {!rel ? (
           <p className="p-6 text-sm text-zinc-500">Carregando…</p>
