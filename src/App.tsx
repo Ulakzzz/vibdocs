@@ -46,6 +46,9 @@ import { AjustarLargura, Previa } from './report/Previa'
 import { Inicio } from './inicio/Inicio'
 import { HistoricoPreditivo } from './historico/HistoricoPreditivo'
 import { BancoVibracao, type FocoBanco } from './banco/BancoVibracao'
+import { Cadastros } from './cadastros/Cadastros'
+import { BuscaRelatorios } from './relatorios/BuscaRelatorios'
+import { carregarTodas } from './lib/config'
 
 type Aba = 'relatorio' | 'equipamentos' | 'anomalias'
 type Estado = 'salvo' | 'salvando' | 'pendente' | 'erro'
@@ -58,7 +61,7 @@ const USUARIO_DEMO: Usuario = {
   nome: 'Usuário de demonstração',
   email: '',
   cargo: '',
-  papel: 'tecnico',
+  papel: 'admin', // demonstração: dados só no navegador, mostra todas as telas
   ativo: true,
   salt: '',
   hash: '',
@@ -118,7 +121,7 @@ export default function App() {
   const [rel, setRel] = useState<Relatorio>()
   const [aba, setAba] = useState<Aba>('equipamentos')
   // depois do login: página inicial (escolha da usina) e só então o editor
-  const [tela, setTela] = useState<'inicio' | 'relatorio' | 'historico' | 'banco'>('inicio')
+  const [tela, setTela] = useState<'inicio' | 'relatorio' | 'historico' | 'banco' | 'cadastros' | 'relatorios'>('inicio')
   // banco de vibração (Omnitrend): equipamento pedido por um botão "Banco"
   const [focoBanco, setFocoBanco] = useState<FocoBanco>()
   useEffect(() => {
@@ -192,6 +195,11 @@ export default function App() {
       .finally(() => setSessaoVerificada(true))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repo])
+
+  // configurações da equipe (textos padrão, GUT, farol, cadastro) — da pasta do SharePoint ou do navegador
+  useEffect(() => {
+    if (usuario) void carregarTodas(raiz)
+  }, [raiz, usuario])
 
   const executar = useCallback(async (f: () => Promise<void>) => {
     setErro('')
@@ -301,7 +309,16 @@ export default function App() {
   const [passos, setPassos] = useState({ voltar: 0, avancar: 0 })
   const contarPassos = () => setPassos({ voltar: passado.current.length, avancar: futuro.current.length })
 
+  const papelRef = useRef<string | undefined>(undefined)
+  papelRef.current = usuario?.papel
+  const avisouLeitor = useRef(0)
   const atualizar = useCallback((f: (r: Relatorio) => Relatorio) => {
+    if (papelRef.current === 'leitor') {
+      // perfil Leitor: consulta e exporta, mas não altera relatórios
+      if (Date.now() - avisouLeitor.current > 4000) avisar('Seu perfil é Leitor: dá para consultar e exportar, mas não alterar.', 'info')
+      avisouLeitor.current = Date.now()
+      return
+    }
     const antes = relAtual.current
     const agora = Date.now()
     if (antes && agora - ultimoPasso.current > 800) {
@@ -739,6 +756,8 @@ export default function App() {
   }
   const itensPaleta: ItemPaleta[] = [
     { id: 'a-inicio', grupo: 'Ações', rotulo: 'Ir para o início', fazer: () => comTransicao(() => setTela('inicio')) },
+    { id: 'a-cad', grupo: 'Ações', rotulo: 'Cadastros (critérios do GUT, textos padrão, farol, equipamentos)', fazer: () => comTransicao(() => setTela('cadastros')) },
+    { id: 'a-rels', grupo: 'Ações', rotulo: 'Buscar relatórios / exportar resumo em Excel', fazer: () => comTransicao(() => setTela('relatorios')) },
     {
       id: 'a-banco',
       grupo: 'Ações',
@@ -821,6 +840,32 @@ export default function App() {
           ))}
           <button
             className="trilho-item"
+            aria-current={tela === 'relatorios' ? 'page' : undefined}
+            title="Relatórios: buscar e exportar resumo em Excel"
+            aria-label="Relatórios"
+            onClick={() => comTransicao(() => setTela('relatorios'))}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M4 4h10l4 4v12H4z" />
+              <path d="M8 12h6M8 16h4" />
+              <circle cx="17.5" cy="17.5" r="3" />
+              <path d="M20 20l2 2" />
+            </svg>
+          </button>
+          <button
+            className="trilho-item"
+            aria-current={tela === 'cadastros' ? 'page' : undefined}
+            title="Cadastros (GUT, textos padrão, farol, equipamentos)"
+            aria-label="Cadastros"
+            onClick={() => comTransicao(() => setTela('cadastros'))}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <rect x="4" y="3" width="16" height="18" rx="2" />
+              <path d="M8 8h8M8 12h8M8 16h5" />
+            </svg>
+          </button>
+          <button
+            className="trilho-item"
             aria-current={tela === 'banco' ? 'page' : undefined}
             title="Banco de vibração (Omnitrend)"
             aria-label="Banco de vibração"
@@ -895,7 +940,15 @@ export default function App() {
           )}
         </aside>
 
-        {tela === 'banco' ? (
+        {tela === 'cadastros' ? (
+          <main className="min-w-0 flex-1 overflow-auto">
+            <Cadastros papel={usuario?.papel ?? 'leitor'} raiz={raiz} linhas={linhas} />
+          </main>
+        ) : tela === 'relatorios' ? (
+          <main className="min-w-0 flex-1 overflow-auto">
+            <BuscaRelatorios raiz={raiz} abrir={continuar} />
+          </main>
+        ) : tela === 'banco' ? (
           <main className="min-w-0 flex-1 overflow-auto">
             <BancoVibracao raiz={raiz} linhas={linhas} usuario={usuario?.nome ?? ''} foco={focoBanco} />
           </main>

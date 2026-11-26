@@ -8,7 +8,7 @@ import { mesCurto } from '../lib/historico'
 import { calcularIndicadores } from '../lib/indicadores'
 import type { VisualModelo } from '../lib/modelo'
 import { AreaLivre } from './AreaLivre'
-import { graficosDoMes } from './graficos'
+import { graficoTiposFalha, graficosDoMes } from './graficos'
 import {
   anomaliaDe,
   colunasQuadro,
@@ -21,6 +21,9 @@ import {
   equipamentosAnomalia,
   equipamentosQuadro,
   juntar,
+  linhasExtras,
+  textoRelatorio,
+  tiposDeFalha,
   type ImagemRef,
   type Relatorio,
 } from '../lib/relatorio'
@@ -220,6 +223,11 @@ function PaginaAnomalia({
           <p>
             <b>Nota PR:</b> {a.notasPR || VAZIO}
           </p>
+          {linhasExtras(r, e, a).map(([k, v]) => (
+            <p key={k}>
+              <b>{k}:</b> {v}
+            </p>
+          ))}
         </div>
         <table className="anom-sev">
           <tbody>
@@ -250,6 +258,14 @@ function PaginaAnomalia({
           </p>
         ))}
       </div>
+      {a.observacoes?.trim() && (
+        <div className="caixa-modelo">
+          <p className="rot">Observações adicionais:</p>
+          {a.observacoes.split(/\r?\n/).map((l, i) => (
+            <p key={i}>{l}</p>
+          ))}
+        </div>
+      )}
       <AreaLivre
         imagens={a.imagens}
         editar={editarImagens && a.layoutImagens === 'livre' ? (imgs) => editarImagens(e.local, imgs) : undefined}
@@ -272,6 +288,7 @@ export const Previa = memo(function Previa({
   const comIndicadores = r.incluirIndicadores !== false
   const nDados = comIndicadores ? 4 : 2
   const g = comIndicadores ? graficosDoMes(calcularIndicadores(r), r.mesReferencia, v?.graficos) : undefined
+  const tipos = tiposDeFalha(r)
   const selos = [...new Set([r.equipe.seloColeta, r.equipe.seloAnalise].filter(Boolean) as string[])]
   const plataforma = r.plataforma === undefined ? v?.plataforma : r.plataforma ? `Plataforma Web Dynamox: ${r.plataforma}` : undefined
   const ponto = (s: string) => (s && !/[.!?]$/.test(s) ? `${s}.` : s)
@@ -297,6 +314,28 @@ export const Previa = memo(function Previa({
         </div>
       </Moldura>
 
+      {/* Resumo e Definição da atividade (opcional) */}
+      {r.incluirResumo && (
+        <Moldura r={r} v={v} classe="pg-dados">
+          <h3 className="!mt-0">Resumo</h3>
+          {textoRelatorio(r, 'resumo')
+            .split(/\r?\n/)
+            .map((l, i) => (
+              <p key={i} className="texto-corrido">
+                {l}
+              </p>
+            ))}
+          <h3>Definição da atividade</h3>
+          {textoRelatorio(r, 'definicao')
+            .split(/\r?\n/)
+            .map((l, i) => (
+              <p key={i} className="texto-corrido">
+                {l}
+              </p>
+            ))}
+        </Moldura>
+      )}
+
       {/* 1. Condição dos equipamentos */}
       <Moldura r={r} v={v}>
         <Titulo n={1}>Condição dos equipamentos da rota</Titulo>
@@ -313,6 +352,11 @@ export const Previa = memo(function Previa({
           <Titulo n={3}>Indicadores de anomalia</Titulo>
           <div className="grafico-modelo" dangerouslySetInnerHTML={{ __html: g.anomalias }} />
           <div className="grafico-modelo" dangerouslySetInnerHTML={{ __html: g.reincidencia }} />
+        </Moldura>
+      )}
+      {g && tipos.length > 0 && (
+        <Moldura r={r} v={v}>
+          <div className="grafico-modelo" dangerouslySetInnerHTML={{ __html: graficoTiposFalha(tipos) }} />
         </Moldura>
       )}
 

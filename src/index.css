@@ -2759,3 +2759,78 @@ tr.piscar {
   color: #000;
   border-color: transparent;
 }
+.banco-auto {
+  display: inline-block;
+  margin-bottom: 2px;
+  border-radius: 999px;
+  padding: 0 7px;
+  background: color-mix(in srgb, var(--color-sinal) 30%, transparent);
+  color: var(--color-texto);
+  font-weight: 600;
+}
+
+/* GUT: significado das notas */
+.gut-bloco + .gut-bloco {
+  margin-top: 2px;
+}
+.gut-desc {
+  margin: 4px 0 0 calc(6.5rem + 12px);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--color-grafite);
+  animation: subir 0.3s var(--ease-mola);
+}
+.gut-tabela {
+  margin-top: 12px;
+  font-size: 0.78rem;
+}
+.gut-tabela summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.gut-tabela table {
+  margin-top: 8px;
+  width: 100%;
+  border-collapse: collapse;
+}
+.gut-tabela th,
+.gut-tabela td {
+  border-bottom: 1px solid var(--color-linha);
+  padding: 5px 6px;
+  text-align: left;
+  vertical-align: top;
+}
+.gut-tabela th {
+  color: var(--color-cinza);
+  font-weight: 600;
+}
+.gut-tabela td.escolhida {
+  background: color-mix(in srgb, var(--color-sinal) 25%, transparent);
+  font-weight: 600;
+}
+.rel-cartao {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--color-linha);
+  border-radius: 16px;
+  background: var(--color-superficie);
+  padding: 12px 14px;
+  text-align: left;
+  font-size: 0.88rem;
+  transition:
+    border-color 0.2s,
+    transform 0.25s var(--ease-mola);
+}
+.rel-cartao:hover {
+  border-color: var(--color-sinal);
+  transform: translateY(-2px);
+}
+fieldset.somente-leitura {
+  opacity: 0.85;
+}
+.pg-dados p.texto-corrido {
+  margin-bottom: 6pt;
+  font-size: 12pt;
+  line-height: 1.4;
+  text-align: justify;
+}

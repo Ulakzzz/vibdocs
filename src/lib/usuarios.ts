@@ -7,8 +7,11 @@
 import { get, set } from 'idb-keyval'
 import { gravarTexto, lerTexto, PASTA_VIBDOCS, subpasta } from './pasta'
 
-export type Papel = 'tecnico' | 'revisor' | 'admin'
-export const PAPEIS: Record<Papel, string> = { tecnico: 'Técnico', revisor: 'Revisor', admin: 'Administrador' }
+// Perfis do requisito: Administrador (tudo), Editor (cria e edita relatórios) e Leitor (só consulta).
+// "revisor" é o nome antigo do editor e continua valendo.
+export type Papel = 'admin' | 'tecnico' | 'leitor' | 'revisor'
+export const PAPEIS: Record<Papel, string> = { admin: 'Administrador', tecnico: 'Editor', leitor: 'Leitor', revisor: 'Editor (revisor)' }
+export const podeEditar = (p?: Papel) => p === 'admin' || p === 'tecnico' || p === 'revisor'
 
 export interface Usuario {
   id: string

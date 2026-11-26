@@ -119,3 +119,29 @@ export async function resumoUsina(raiz: FileSystemDirectoryHandle, usina: string
     emitidos: await contar([PASTA_VIBDOCS, 'emitidos', usina, aaaa, mm], 'arquivos'),
   }
 }
+
+/** Todos os relatórios guardados na pasta do SharePoint (VibDocs/rascunhos/<usina>/<ano>/<mês>/<área>/relatorio.json). */
+export async function rascunhosDaPasta(raiz: FileSystemDirectoryHandle, progresso?: (n: number) => void): Promise<Relatorio[]> {
+  const out: Relatorio[] = []
+  let base: FileSystemDirectoryHandle
+  try {
+    base = await subpasta(raiz, [PASTA_VIBDOCS, 'rascunhos'])
+  } catch {
+    return out
+  }
+  const andar = async (d: FileSystemDirectoryHandle, nivel: number) => {
+    const { pastas, arquivos } = await listar(d)
+    const rel = arquivos.find((a) => a.name === 'relatorio.json')
+    if (rel) {
+      try {
+        out.push(JSON.parse(await (await rel.getFile()).text()) as Relatorio)
+        progresso?.(out.length)
+      } catch {
+        /* arquivo em sincronização */
+      }
+    }
+    if (nivel < 5) for (const p of pastas) if (p !== 'imagens') await andar(await d.getDirectoryHandle(p), nivel + 1)
+  }
+  await andar(base, 0)
+  return out
+}

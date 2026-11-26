@@ -27,7 +27,7 @@ import { CONDICOES, severidade } from './condicao'
 import { blobImagem, imagemNaCaixa } from './imagens'
 import { mesCurto } from './historico'
 import { calcularIndicadores } from './indicadores'
-import { ALTURA_MODELO, graficosDoMes, LARGURA_MODELO, svgParaPng } from '../report/graficos'
+import { ALTURA_MODELO, graficoTiposFalha, graficosDoMes, LARGURA_MODELO, svgParaPng } from '../report/graficos'
 import {
   anomaliaDe,
   AREA_IMAGENS_MM,
@@ -37,7 +37,10 @@ import {
   equipamentosAnomalia,
   equipamentosQuadro,
   juntar,
+  linhasExtras,
   localizacaoPadrao,
+  textoRelatorio,
+  tiposDeFalha,
   posicaoLivre,
   reincidenciaFinal,
   rotulosUsina,
@@ -307,6 +310,7 @@ async function paginaAnomalia(r: Relatorio, local: string): Promise<(Paragraph |
               campo(rot.data, a.dataMedicao || VAZIO),
               campo('Reincidente desde', reincidenciaFinal(r, e, a) || VAZIO),
               campo('Nota PR', a.notasPR || VAZIO),
+              ...linhasExtras(r, e, a).map(([k, v]) => campo(k, v)),
             ],
             { l: UTIL - lSev, margem: 0 },
           ),
@@ -361,6 +365,7 @@ async function paginaAnomalia(r: Relatorio, local: string): Promise<(Paragraph |
     caixa('Situação:', situacao, true),
     p([], { depois: 60 }),
     caixa('Recomendação:', recomendacao, recomendacao.length > 1),
+    ...(a.observacoes?.trim() ? [p([], { depois: 60 }), caixa('Observações adicionais:', a.observacoes.split(/\r?\n/).map((l) => ['', l] as [string, string]), false)] : []),
     await imagens(r, local),
   ]
 }
@@ -378,6 +383,15 @@ export async function gerarWord(r: Relatorio): Promise<Blob> {
     p([t(`${r.cidade ? `${r.cidade}, ` : ''}${dataPorExtenso(r.dataExpedicao).replace(/^0/, '')}`, { pt: 14 })], { align: AlignmentType.CENTER, antes: 3700 }),
   ]
 
+  const corrido = (s: string) => s.split(/\r?\n/).map((l) => p([t(l, { pt: 12 })], { depois: 120, align: AlignmentType.JUSTIFIED }))
+  const resumo: Paragraph[] = r.incluirResumo
+    ? [
+        p([t('Resumo', { b: true, pt: 14 })], { quebra: true, depois: 160 }),
+        ...corrido(textoRelatorio(r, 'resumo')),
+        p([t('Definição da atividade', { b: true, pt: 14 })], { antes: 300, depois: 160 }),
+        ...corrido(textoRelatorio(r, 'definicao')),
+      ]
+    : []
   const condicao: (Paragraph | Table)[] = [titulo(1, 'Condição dos equipamentos da rota', { quebra: true }), legenda(), ...quadro(r)]
 
   const indicadores: (Paragraph | Table)[] = []
@@ -397,6 +411,8 @@ export async function gerarWord(r: Relatorio): Promise<Blob> {
       await fig(g.anomalias, 'Indicador de anomalias'),
       await fig(g.reincidencia, 'Índice de reincidências'),
     )
+    const tipos = tiposDeFalha(r)
+    if (tipos.length) indicadores.push(p([], { quebra: true }), await fig(graficoTiposFalha(tipos), 'Tipo de falhas'))
   }
 
   const linha14 = (s: string) => p([t(s, { pt: 14 })], { linha: 300 })
@@ -441,7 +457,7 @@ export async function gerarWord(r: Relatorio): Promise<Blob> {
       properties: { page: { ...pagina, margin: { ...pagina.margin, top: 1900, bottom: 1500 } } },
       headers: { default: cab },
       footers: { default: rodape(r) },
-      children: [...rosto, ...condicao, ...indicadores, ...dados],
+      children: [...rosto, ...resumo, ...condicao, ...indicadores, ...dados],
     },
     // páginas de anomalia: sem cabeçalho nem rodapé, uma seção por equipamento
     ...(await Promise.all(

@@ -2,6 +2,7 @@
 import { CONDICOES } from '../lib/condicao'
 import {
   gerarCodigo,
+  textoRelatorio,
   lembrarArt,
   MESES_QUADRO_PADRAO,
   PADRAO_ANOMALIA,
@@ -11,7 +12,7 @@ import {
   type PerfilTecnico,
   type Relatorio,
 } from '../lib/relatorio'
-import { btnMini, Campo, Texto } from './campos'
+import { btnMini, Campo, Texto, TextoLongo } from './campos'
 import { ModeloWord } from './ModeloWord'
 
 type Atualizar = (f: (r: Relatorio) => Relatorio) => void
@@ -225,8 +226,28 @@ export function PainelRelatorio({
           checked={r.incluirIndicadores !== false}
           onChange={(e) => set('incluirIndicadores', e.target.checked)}
         />
-        Incluir página de indicadores (execução, anomalias e reincidência)
+        Incluir página de indicadores (execução, anomalias, reincidência e tipo de falhas)
       </label>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={!!r.mostrarDiagnostico} onChange={(e) => set('mostrarDiagnostico', e.target.checked)} />
+        Mostrar a linha “Diagnóstico” nas páginas de anomalia (condição normal, alerta, alarme)
+      </label>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={!!r.incluirResumo} onChange={(e) => set('incluirResumo', e.target.checked)} />
+        Incluir as seções “Resumo” e “Definição da atividade”
+      </label>
+      {r.incluirResumo && (
+        <div className="grid gap-3">
+          <Campo rotulo="Resumo" dica="Vazio = texto padrão (Cadastros › Textos do relatório).">
+            <TextoLongo valor={r.resumo ?? ''} placeholder={textoRelatorio(r, 'resumo')} mudar={(v) => set('resumo', v)} linhas={4} />
+          </Campo>
+          <Campo rotulo="Definição da atividade" dica="Vazio = texto padrão (Cadastros › Textos do relatório).">
+            <TextoLongo valor={r.definicao ?? ''} placeholder={textoRelatorio(r, 'definicao')} mudar={(v) => set('definicao', v)} linhas={4} />
+          </Campo>
+        </div>
+      )}
 
       <ModeloWord raiz={raiz} usina={r.usina} />
 

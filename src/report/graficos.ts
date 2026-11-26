@@ -215,6 +215,16 @@ export function svgGraficoModelo(titulo: string, series: { nome: string; cor: st
 
 type SeriesModelo = Partial<Record<'execucao' | 'anomalias' | 'reincidencia', { titulo: string; series: { nome: string; cor: string }[] }>>
 
+const CORES_FALHA = ['#FFC20E', '#FF6B35', '#0077B6', '#2A9D8F', '#9B5DE5', '#E63946', '#8D99AE', '#43AA8B', '#F15BB5']
+
+/** Gráfico "Tipo de falhas": anomalias do relatório por modo de falha (GUT) ou falha escolhida no texto padrão. */
+export function graficoTiposFalha(tipos: { nome: string; n: number }[]) {
+  return svgGraficoModelo(
+    'Tipo de Falhas',
+    tipos.map((t, i) => ({ nome: t.nome, cor: CORES_FALHA[i % CORES_FALHA.length], valor: t.n })),
+  )
+}
+
 /** Os três gráficos do mês do relatório, com títulos, nomes e cores do modelo (ou os do DWS, sem modelo). */
 export function graficosDoMes(ind: Indicadores, mes: string, doModelo: SeriesModelo = {}) {
   const ex = ind.execucao.find((x) => x.mes === mes)

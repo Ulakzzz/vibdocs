@@ -25,7 +25,9 @@ import {
   type Relatorio,
   type Slot,
 } from '../lib/relatorio'
-import { TEXTOS_PADRAO, textoPorId } from '../lib/textos'
+import { textosAtuais, textoPorId } from '../lib/textos'
+import { raizConfig, useConfig } from '../lib/config'
+import { garantirFoto, itemCadastro } from '../lib/cadastro'
 import { Abas, btn, btnMini, Campo, Texto, TextoLongo } from './campos'
 
 type Atualizar = (f: (r: Relatorio) => Relatorio) => void
@@ -43,9 +45,13 @@ export function PainelAnomalias({
   selecionar: (local: string) => void
   aoMudarCondicao?: (e: EquipRel, c: string) => void
 }) {
+  useConfig('textos-padrao') // relê a lista quando o administrador muda os textos
+  useConfig('status-nomes')
+  useConfig('gut-criterios')
   const fora = r.foraDaAnalise ?? []
   // na lista: os que geram página + os "a analisar" que foram tirados (aparecem apagados, com a caixa desmarcada)
-  const lista = r.equipamentos.filter((e) => equipamentosAnomalia(r).includes(e) || (aAnalisar(e) && fora.includes(e.local)))
+  // mesma ordem do relatório (alarme, alerta, pré-alerta…); os tirados da análise vão no fim
+  const lista = [...equipamentosAnomalia(r), ...r.equipamentos.filter((e) => aAnalisar(e) && fora.includes(e.local))]
   const atual = lista.find((e) => e.local === selecionado && !fora.includes(e.local)) ?? lista.find((e) => !fora.includes(e.local))
   const alternarAnalise = (local: string) =>
     atualizar((x) => {
@@ -112,6 +118,24 @@ function EditorAnomalia({ r, e, atualizar, mudarCondicao }: { r: Relatorio; e: E
   const a = anomaliaDe(r, e)
   const mudar = (f: (a: Anomalia) => Anomalia) =>
     atualizar((x) => ({ ...x, anomalias: { ...x.anomalias, [e.local]: f(anomaliaDe(x, e)) } }))
+  // foto do cadastro do equipamento entra sozinha no quadro "Foto" (uma vez por página)
+  const fotoCad = itemCadastro(e.local)?.foto
+  useEffect(() => {
+    if (!fotoCad || a.fotoCadastro || a.imagens.some((i) => i.slot === 'foto')) return
+    let vivo = true
+    garantirFoto(raizConfig(), e.local).then((id) => {
+      if (!vivo || !id) return
+      mudar((an) =>
+        an.fotoCadastro || an.imagens.some((i) => i.slot === 'foto')
+          ? an
+          : { ...an, fotoCadastro: true, imagens: [...an.imagens, { id, slot: 'foto', nome: 'Foto do cadastro', ajuste: 'conter' }] },
+      )
+    })
+    return () => {
+      vivo = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fotoCad, e.local])
   const mudarEixo = (id: string, f: (x: Eixo) => Eixo) => mudar((an) => ({ ...an, eixos: an.eixos.map((x) => (x.id === id ? f(x) : x)) }))
 
   return (
@@ -253,7 +277,7 @@ function EditorAnomalia({ r, e, atualizar, mudarCondicao }: { r: Relatorio; e: E
                     const t = textoPorId(v)
                     mudarEixo(x.id, (y) => ({ ...y, falha: v, situacaoPadrao: t?.situacao ?? '', recomendacaoPadrao: t?.recomendacao ?? '' }))
                   }}
-                  opcoes={[{ valor: '', rotulo: '— falha / texto padrão —' }, ...TEXTOS_PADRAO.map((t) => ({ valor: t.id, rotulo: t.nome }))]}
+                  opcoes={[{ valor: '', rotulo: '— falha / texto padrão —' }, ...textosAtuais().map((t) => ({ valor: t.id, rotulo: t.nome }))]}
                 />
                 <button
                   className={btnMini}
@@ -304,6 +328,10 @@ function EditorAnomalia({ r, e, atualizar, mudarCondicao }: { r: Relatorio; e: E
           ))}
         </div>
       </section>
+
+      <Campo rotulo="Observações adicionais (opcional)" dica="Avaliação em campo, sensitiva, histórico de intervenções… Sai num quadro próprio quando preenchido.">
+        <TextoLongo valor={a.observacoes ?? ''} mudar={(v) => mudar((an) => ({ ...an, observacoes: v }))} linhas={3} />
+      </Campo>
 
       <Imagens
         imagens={a.imagens}

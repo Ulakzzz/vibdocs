@@ -1,6 +1,7 @@
 // Priorização GUT (Gravidade × Urgência × Tendência) da anomalia, corrigida pela criticidade SAP do equipamento.
 // Faixas, fatores e prazos seguem a planilha "GUT Vibração – nova versão" da equipe. Os critérios detalhados de
 // cada nota (amplitudes, rotação, sintomas) ficam na planilha; aqui só os nomes, para não expor o documento.
+import type { CriteriosGut } from './gutCriterios'
 import type { Anomalia, Relatorio } from './relatorio'
 
 export const MODOS_FALHA = [
@@ -41,14 +42,30 @@ export interface ResultadoGut {
   notaPR: boolean
 }
 
-export function calcularGut(g: Gut): ResultadoGut {
+/** Situação no padrão do app a partir do texto da planilha ("Pré alerta", "Alerta", "Alarme"). */
+const situacaoDe = (s: string): ResultadoGut['situacao'] => (/alarme/i.test(s) ? 'Alarme' : /pr[ée]/i.test(s) ? 'Pré-alerta' : 'Alerta')
+
+export function calcularGut(g: Gut, criterios?: CriteriosGut): ResultadoGut {
   const bruto = g.g * g.u * g.t
-  const valor = Math.round(bruto * CRITICIDADE[g.criticidade] * 10) / 10
+  const fator = criterios?.fatores[g.criticidade] ?? CRITICIDADE[g.criticidade] ?? 1
+  const valor = Math.round(bruto * fator * 10) / 10
+  // faixas da planilha importada (se houver); senão as da versão atual da planilha
+  const faixa = criterios?.faixas.find((f) => valor >= f.minimo)
+  if (faixa)
+    return { valor, bruto, prioridade: faixa.prioridade, prazoDias: faixa.prazoDias, situacao: situacaoDe(faixa.situacao), notaPR: !/sem nota/i.test(faixa.prioridade) }
   if (valor >= 80) return { valor, bruto, prioridade: 'Muito alto (A2)', prazoDias: 7, situacao: 'Alarme', notaPR: true }
   if (valor > 59) return { valor, bruto, prioridade: 'Alto (A1)', prazoDias: 15, situacao: 'Alerta', notaPR: true }
   if (valor > 35) return { valor, bruto, prioridade: 'Médio (A1)', prazoDias: 30, situacao: 'Alerta', notaPR: true }
   if (valor > 16) return { valor, bruto, prioridade: 'Baixo (A1), sem nota PR', prazoDias: 60, situacao: 'Pré-alerta', notaPR: false }
   return { valor, bruto, prioridade: 'Sem nota PR', prazoDias: null, situacao: 'Pré-alerta', notaPR: false }
+}
+
+/** Conclusão desejada (prazo do laudo): data da coleta + prazo da faixa do GUT. */
+export function conclusaoDesejada(r: Relatorio, a: Anomalia, criterios?: CriteriosGut): Date | undefined {
+  if (!a.gut?.modo) return undefined
+  const res = calcularGut(a.gut, criterios)
+  if (!res.prazoDias) return undefined
+  return new Date(dataIdentificacao(r, a).getTime() + res.prazoDias * 86400000)
 }
 
 export const gutPadrao = (): Gut => ({ modo: '', g: 1, u: 1, t: 1, criticidade: 'A' })
@@ -65,13 +82,13 @@ export function dataIdentificacao(r: Relatorio, a: Anomalia): Date {
 }
 
 /** Lembretes da anomalia (base do aviso no celular, ainda não enviados). */
-export function lembretes(r: Relatorio, a: Anomalia, condicao: string) {
+export function lembretes(r: Relatorio, a: Anomalia, condicao: string, criterios?: CriteriosGut) {
   const inicio = dataIdentificacao(r, a)
   const somar = (dias: number) => new Date(inicio.getTime() + dias * 86400000)
   const out: { tipo: 'enviar' | 'reanalisar'; quando: Date; texto: string }[] = []
   if (condicao === '4') out.push({ tipo: 'enviar', quando: somar(1), texto: 'Alarme: enviar o relatório ao cliente (prazo curto desde a identificação)' })
   if (a.gut?.modo) {
-    const res = calcularGut(a.gut)
+    const res = calcularGut(a.gut, criterios)
     if (res.prazoDias) out.push({ tipo: 'reanalisar', quando: somar(res.prazoDias), texto: `Nova análise / vencimento do laudo (GUT ${res.valor.toLocaleString('pt-BR')}, ${res.prazoDias} dias)` })
   }
   return out

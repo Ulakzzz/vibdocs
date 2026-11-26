@@ -61,7 +61,13 @@ await pg.getByRole('tab', { name: /^Todos/ }).click()
 const linha = pg.locator('tr[data-local-eq="VM52-DEMO-AAA-010"]')
 await linha.hover()
 await linha.getByRole('button', { name: 'Banco' }).click()
-await pg.locator('.banco-maq.on', { hasText: nomeMaq }).waitFor({ timeout: 30000 })
+try {
+  await pg.locator('.banco-maq.on', { hasText: nomeMaq }).waitFor({ timeout: 20000 })
+} catch (e) {
+  await pg.screenshot({ path: `${pasta ?? '.'}/banco-falha.png` })
+  console.error('FALHA ao voltar pelo botão Banco. Tela:', (await pg.locator('main').innerText()).slice(0, 300).split(String.fromCharCode(10)).join(' | '))
+  throw e
+}
 await foto(5)
 console.log(process.exitCode ? 'com falhas' : 'ok: banco, gráficos e vínculo')
 await nav.close()

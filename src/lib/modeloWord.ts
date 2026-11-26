@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx'
 import { CONDICOES, severidade } from './condicao'
 import { blobImagem, imagemNaCaixa } from './imagens'
 import { mesCurto } from './historico'
+import { ALTURA_MODELO, graficoTiposFalha, LARGURA_MODELO, svgParaPng } from '../report/graficos'
 import { calcularIndicadores } from './indicadores'
 import {
   anomaliaDe,
@@ -17,7 +18,10 @@ import {
   equipamentosAnomalia,
   equipamentosQuadro,
   juntar,
+  linhasExtras,
   localizacaoPadrao,
+  textoRelatorio,
+  tiposDeFalha,
   posicaoLivre,
   reincidenciaFinal,
   rotulosUsina,
@@ -380,10 +384,12 @@ async function preencherAnomalia(pk: Pacote, doc: Document, bloco: Element[], r:
         else tcPr.append(shd)
       }
     })
-    if (rot.severidades[2] !== 'Pré-Alerta') {
-      const p = w(tbl, 'p').find((x) => /Pr[ée]-?Alerta/i.test(textoP(x)))
-      if (p) trocarTexto(p, rot.severidades[2])
-    }
+    // nomes do farol (personalizáveis por usina em Cadastros)
+    const padrao = [/^\s*Alarme\s*$/i, /^\s*Alerta\s*$/i, /Pr[ée]-?\s?Alerta/i]
+    rot.severidades.forEach((nome, i) => {
+      const p = w(tbl, 'p').find((x) => padrao[i].test(textoP(x)))
+      if (p && textoP(p).trim() !== nome) trocarTexto(p, nome)
+    })
   }
 
   const ps = bloco.filter((x) => x.localName === 'p')
@@ -419,11 +425,18 @@ async function preencherAnomalia(pk: Pacote, doc: Document, bloco: Element[], r:
     const pPr = filhos(pRe ?? pLoc, NS.w, 'pPr')[0]
     novos.push(
       `<w:p>${pPr ? new XMLSerializer().serializeToString(pPr) : ''}<w:r>${rotRpr}<w:t xml:space="preserve">Nota PR: </w:t></w:r><w:r>${valRpr}<w:t xml:space="preserve">${esc(a.notasPR || VAZIO)}</w:t></w:r></w:p>`,
+      // conclusão desejada (GUT) e diagnóstico resumido, no mesmo formato dos campos
+      ...linhasExtras(r, e, a).map(
+        ([k, v]) =>
+          `<w:p>${pPr ? new XMLSerializer().serializeToString(pPr) : ''}<w:r>${rotRpr}<w:t xml:space="preserve">${esc(k)}: </w:t></w:r><w:r>${valRpr}<w:t xml:space="preserve">${esc(v)}</w:t></w:r></w:p>`,
+      ),
     )
   }
   const situacao = a.eixos.map((x) => [x.nome, juntar(x.situacaoPadrao, x.situacaoTecnico)] as [string, string]).filter(([, t]) => t)
   const recomendacao = a.eixos.map((x) => [x.nome, juntar(x.recomendacaoPadrao, x.recomendacaoTecnico)] as [string, string]).filter(([, t]) => t)
   novos.push(ESPACADOR, caixaTexto('Situação:', situacao, true), ESPACADOR, caixaTexto('Recomendação:', recomendacao, recomendacao.length > 1))
+  if (a.observacoes?.trim())
+    novos.push(ESPACADOR, caixaTexto('Observações adicionais:', a.observacoes.split(/\r?\n/).map((l) => ['', l] as [string, string]), false))
   for (const n of novos.flatMap((x) => frag(doc, x))) fim.before(n)
 
   // imagens flutuantes, ancoradas no parágrafo final, na mesma posição (em %) da prévia
@@ -460,6 +473,24 @@ export async function gerarWordDoModelo(r: Relatorio, modelo: ArrayBuffer): Prom
   const pData = acharP(els(), /^\s*[^,\d]+,\s*\d{1,2}\s+de\s+\p{L}+\s+de\s+\d{4}\s*$/u)
   if (pData) trocarTexto(pData, `${r.cidade ? `${r.cidade}, ` : ''}${dataPorExtenso(r.dataExpedicao).replace(/^0/, '')}`)
 
+  // Resumo e Definição da atividade (opcional): numa página própria, antes da seção 1
+  if (r.incluirResumo) {
+    const tit = els().find((e) => /Condi[çc][ãa]o dos equipamentos/i.test(textoP(e)))
+    if (tit) {
+      const rpr = (b: boolean, pt: number) => `<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>${b ? '<w:b/><w:bCs/>' : ''}<w:sz w:val="${pt * 2}"/><w:szCs w:val="${pt * 2}"/></w:rPr>`
+      const titulo = (s: string, quebra: boolean) =>
+        `<w:p><w:pPr>${quebra ? '<w:pageBreakBefore/>' : ''}<w:spacing w:before="${quebra ? 0 : 300}" w:after="160"/></w:pPr><w:r>${rpr(true, 14)}<w:t xml:space="preserve">${esc(s)}</w:t></w:r></w:p>`
+      const corrido = (s: string) =>
+        s
+          .split(/\r?\n/)
+          .map((l) => `<w:p><w:pPr><w:spacing w:after="120"/><w:jc w:val="both"/></w:pPr><w:r>${rpr(false, 12)}<w:t xml:space="preserve">${esc(l)}</w:t></w:r></w:p>`)
+          .join('')
+      const xml = titulo('Resumo', true) + corrido(textoRelatorio(r, 'resumo')) + titulo('Definição da atividade', false) + corrido(textoRelatorio(r, 'definicao'))
+      tit.before(...frag(doc, xml))
+      quebraAntes(tit)
+    }
+  }
+
   // 1. Condição dos equipamentos: a última figura antes do próximo título vira a tabela do quadro
   const lista = els()
   const iCond = lista.findIndex((e) => /Condi[çc][ãa]o dos equipamentos/i.test(textoP(e)))
@@ -492,6 +523,24 @@ export async function gerarWordDoModelo(r: Relatorio, modelo: ArrayBuffer): Prom
     }
   } else {
     await atualizarGraficos(pk, r)
+    // 4º gráfico (requisito): tipo de falhas, como figura logo depois do gráfico de reincidências
+    const tipos = tiposDeFalha(r)
+    const iDadosAgora = els().findIndex((e) => /Dados operacionais/i.test(textoP(e)))
+    const graficos = els().filter((e, i) => (iDadosAgora < 0 || i < iDadosAgora) && todos(e, NS.c, 'chart').length > 0)
+    const ultimo = graficos.at(-1)
+    if (tipos.length && ultimo) {
+      const png = await svgParaPng(graficoTiposFalha(tipos), 2, LARGURA_MODELO, ALTURA_MODELO)
+      const rid = await pk.imagem('word/document.xml', png, 'png')
+      const cx = Math.round((LARGURA_UTIL_DXA / 1440) * 2.54 * EMU_CM)
+      const cy = Math.round((cx * ALTURA_MODELO) / LARGURA_MODELO)
+      const n = ++idDesenho
+      ultimo.after(
+        ...frag(
+          doc,
+          `<w:p><w:pPr><w:pageBreakBefore/></w:pPr><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${n}" name="Tipo de falhas"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="${n}" name="Tipo de falhas"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`,
+        ),
+      )
+    }
   }
   const pDados = acharP(els(), /Dados operacionais/i)
   if (pDados) {

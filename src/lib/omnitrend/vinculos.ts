@@ -9,6 +9,8 @@ export interface Vinculo {
   no: number // Node_ID da máquina no Omnitrend
   caminho: string[] // nomes até a máquina (para achar de novo se o ID mudar)
   descricao?: string // descrição da planilha no momento do vínculo
+  automatico?: boolean // juntado pelo app (nome muito parecido); o técnico pode desfazer
+  nota?: number
   por?: string
   em: string
 }
@@ -33,6 +35,21 @@ export async function lerVinculos(raiz?: FileSystemDirectoryHandle): Promise<Vin
   return { ...local, ...(pasta ?? {}) }
 }
 
+/** Grava vários vínculos de uma vez (null remove), relendo antes para não apagar os de colegas. */
+export async function gravarVinculos(raiz: FileSystemDirectoryHandle | undefined, mudancas: Record<string, Vinculo | null>): Promise<Vinculos> {
+  const atual = await lerVinculos(raiz)
+  for (const [tag, v] of Object.entries(mudancas)) {
+    if (v) atual[tag] = v
+    else delete atual[tag]
+  }
+  await set(CHAVE, atual)
+  if (raiz) {
+    const dir = await subpasta(raiz, [PASTA_VIBDOCS, 'config'], true)
+    await gravarTexto(dir, ARQ, JSON.stringify({ versao: 1, atualizado: new Date().toISOString(), vinculos: atual }, null, 1))
+  }
+  return atual
+}
+
 /** Grava (ou remove, com v = null) o vínculo de uma TAG, mesclando com o que está no SharePoint. */
 export async function gravarVinculo(raiz: FileSystemDirectoryHandle | undefined, tag: string, v: Vinculo | null): Promise<Vinculos> {
   const atual = await lerVinculos(raiz)
@@ -46,4 +63,4 @@ export async function gravarVinculo(raiz: FileSystemDirectoryHandle | undefined,
   return atual
 }
 
-export { palavras, sugerir, type Sugestao } from './sugerir'
+export { palavras, sugerir, vincularAutomatico, type Sugestao } from './sugerir'

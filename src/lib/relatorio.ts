@@ -1,5 +1,10 @@
 // Modelo do documento do relatório (um JSON por relatório) e regras automáticas.
 // Tudo que é automático pode ser editado depois pelo técnico.
+import { lerConfig } from './config'
+import { textoPorId } from './textos'
+import { itemCadastro } from './cadastro'
+import { conclusaoDesejada } from './gut'
+import type { CriteriosGut } from './gutCriterios'
 import { siglaArea, type LinhaControle } from './controle'
 import { mesCurto, mesesDoQuadro, reincidenteDesde, type Execucao, type Historico } from './historico'
 
@@ -82,6 +87,10 @@ export interface Anomalia {
   imagens: ImagemRef[]
   /** 'padrao' = espaços fixos (tendência, espectro, foto); 'livre' = posição e tamanho escolhidos na prévia */
   layoutImagens?: 'padrao' | 'livre'
+  /** Quadro opcional "Observações adicionais" (avaliação em campo, sensitiva, histórico de intervenções…) */
+  observacoes?: string
+  /** a foto do cadastro do equipamento já foi trazida para esta página */
+  fotoCadastro?: boolean
   /** Marcada pelo técnico com o botão "Finalizar": conta como página preenchida */
   finalizada?: boolean
   /** Priorização GUT (uso interno: não sai no relatório) */
@@ -131,6 +140,12 @@ export interface Relatorio {
   historico?: { condicoes: Historico; execucao?: Execucao; fonte: string; atualizadoEm: string }
   /** Equipamentos "a analisar" que o técnico tirou da lista de anomalias */
   foraDaAnalise?: string[]
+  /** Seções "Resumo" e "Definição da atividade" (textos padrão em Cadastros, ajustáveis por relatório) */
+  incluirResumo?: boolean
+  resumo?: string
+  definicao?: string
+  /** Linha "Diagnóstico" na página de anomalia (condição normal / alerta / alarme) */
+  mostrarDiagnostico?: boolean
   /** Mostrar a página de indicadores (execução, anomalias, reincidência). */
   incluirIndicadores?: boolean
 }
@@ -188,7 +203,7 @@ export function novoEixo(n: number, id = novoId()): Eixo {
 
 export function novaAnomalia(e: EquipRel): Anomalia {
   return {
-    equipamento: e.descricao,
+    equipamento: itemCadastro(e.local)?.nome ?? e.descricao,
     dataMedicao: '',
     reincidenteDesde: '',
     notasPR: '',
@@ -260,7 +275,12 @@ export const aAnalisar = (e: EquipRel) => !!e.executado && !e.condicao
 /** Equipamentos que geram página de anomalia, na ordem do quadro.
  *  Os "a analisar" entram também (até o técnico tirar ou o GUT definir a condição). */
 export const equipamentosAnomalia = (r: Relatorio) =>
-  r.equipamentos.filter((e) => r.condicoesAnomalia.includes(e.condicao) || (aAnalisar(e) && !(r.foraDaAnalise ?? []).includes(e.local)))
+  r.equipamentos
+    .filter((e) => r.condicoesAnomalia.includes(e.condicao) || (aAnalisar(e) && !(r.foraDaAnalise ?? []).includes(e.local)))
+    // laudos pela gravidade: alarme, alerta, pré-alerta, demais e, por fim, os ainda a analisar
+    .map((e, i) => ({ e, i, g: ({ '4': 0, '3': 1, '2': 2 } as Record<string, number>)[e.condicao] ?? (e.condicao ? 3 : 4) }))
+    .sort((a, b) => a.g - b.g || a.i - b.i)
+    .map((x) => x.e)
 
 /** O que ainda falta preencher na página de anomalia (vazio = completa). */
 export function faltandoNaPagina(r: Relatorio, e: EquipRel): string[] {
@@ -329,16 +349,59 @@ export function normalizar(r: Relatorio): Relatorio {
 }
 
 // ---------- rótulos que mudam por usina (conforme os relatórios emitidos) ----------
+/** Nomes do "farol" (alguns clientes usam outros nomes): definidos pelo administrador em Cadastros, por usina. */
+export interface NomesStatus {
+  alarme: string
+  alerta: string
+  pre: string
+}
 export function rotulosUsina(usina: string) {
   const min = usina === 'Mineração'
+  const cfg = lerConfig<{ padrao?: Partial<NomesStatus>; porUsina?: Record<string, Partial<NomesStatus>> }>('status-nomes')
+  const n = { ...cfg?.padrao, ...cfg?.porUsina?.[usina] }
   return {
     data: min ? 'Data' : 'Data da coleta',
-    severidades: ['Alarme', 'Alerta', min ? 'Monitoramento' : 'Pré-Alerta'] as const,
+    severidades: [n.alarme || 'Alarme', n.alerta || 'Alerta', n.pre || (min ? 'Monitoramento' : 'Pré-Alerta')] as readonly [string, string, string],
   }
 }
 
 /** Localização padrão da página de anomalia: em Jeceaba é o Local de instalação; nas demais, o nome da área. */
-export const localizacaoPadrao = (r: Relatorio, e: EquipRel) => (r.usina === 'Jeceaba' ? e.local : r.areaTitulo || r.sigla)
+export const localizacaoPadrao = (r: Relatorio, e: EquipRel) => itemCadastro(e.local)?.localizacao || (r.usina === 'Jeceaba' ? e.local : r.areaTitulo || r.sigla)
+
+/** Anomalias do relatório por tipo de falha (modo do GUT; senão a falha do texto padrão da 1ª parte). */
+export function tiposDeFalha(r: Relatorio): { nome: string; n: number }[] {
+  const conta = new Map<string, number>()
+  for (const e of equipamentosAnomalia(r)) {
+    if (!['2', '3', '4'].includes(e.condicao)) continue
+    const a = r.anomalias[e.local]
+    const falha = a?.eixos.find((x) => x.falha)?.falha
+    const nome = a?.gut?.modo || (falha && textoPorId(falha)?.nome) || 'Não informado'
+    conta.set(nome, (conta.get(nome) ?? 0) + 1)
+  }
+  return [...conta.entries()].map(([nome, n]) => ({ nome, n })).sort((a, b) => b.n - a.n)
+}
+
+/** Texto do Resumo / Definição da atividade: o do relatório ou o padrão de Cadastros, com {usina}, {area} e {mes}. */
+export function textoRelatorio(r: Relatorio, qual: 'resumo' | 'definicao') {
+  const proprio = qual === 'resumo' ? r.resumo : r.definicao
+  const padrao = lerConfig<{ resumo: string; definicao: string }>('textos-relatorio')?.[qual] ?? ''
+  return (proprio?.trim() ? proprio : padrao)
+    .replace(/\{usina\}/g, r.usina)
+    .replace(/\{area\}/g, r.areaTitulo || r.sigla)
+    .replace(/\{mes\}/g, mesCurto(r.mesReferencia))
+}
+
+/** Linhas a mais na página de anomalia, depois da Nota PR: conclusão desejada (GUT) e diagnóstico resumido. */
+export function linhasExtras(r: Relatorio, e: EquipRel, a: Anomalia): [string, string][] {
+  const out: [string, string][] = []
+  const fim = conclusaoDesejada(r, a, lerConfig<CriteriosGut>('gut-criterios'))
+  if (fim) out.push(['Conclusão desejada', fim.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })])
+  if (r.mostrarDiagnostico) {
+    const sev = e.condicao === '4' ? 'Equipamento em condição de alarme' : e.condicao === '3' ? 'Equipamento em status de alerta' : e.condicao === '2' ? 'Equipamento em status de pré-alerta' : e.condicao === '1' ? 'Condição normal de operação' : ''
+    if (sev) out.push(['Diagnóstico', sev])
+  }
+  return out
+}
 
 /** ART lembrada por usina (a ART é do contrato/relatório, não do técnico). */
 export const artDaUsina = (usina: string) => (typeof localStorage === 'undefined' ? '' : (localStorage.getItem(`vibdocs.art.${usina}`) ?? ''))

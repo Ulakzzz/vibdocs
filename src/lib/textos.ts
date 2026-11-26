@@ -78,4 +78,8 @@ export const TEXTOS_PADRAO: TextoPadrao[] = [
   },
 ]
 
-export const textoPorId = (id: string) => TEXTOS_PADRAO.find((t) => t.id === id)
+import { lerConfig } from './config'
+
+/** Textos em uso: os do administrador (Cadastros, VibDocs/config/textos-padrao.json) ou os provisórios acima. */
+export const textosAtuais = (): TextoPadrao[] => lerConfig<{ textos: TextoPadrao[] }>('textos-padrao')?.textos ?? TEXTOS_PADRAO
+export const textoPorId = (id: string) => textosAtuais().find((t) => t.id === id)

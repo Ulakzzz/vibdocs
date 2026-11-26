@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { LinhaControle } from '../lib/controle'
 import { BancoAberto, listarBancos, PASTA_BANCOS, type ArquivoBanco } from '../lib/omnitrend/cliente'
 import type { Espectro, NoOT, TarefaOT } from '../lib/omnitrend/ler'
-import { gravarVinculo, lerVinculos, sugerir, type Vinculos } from '../lib/omnitrend/vinculos'
+import { gravarVinculo, gravarVinculos, lerVinculos, sugerir, vincularAutomatico, type Vinculo, type Vinculos } from '../lib/omnitrend/vinculos'
 import { avisar } from '../ui/Avisos'
 import { Carregando } from '../ui/Contador'
 import { Seletor } from '../ui/Seletor'
@@ -109,6 +109,29 @@ export function BancoVibracao({
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [foco?.n, arquivos, vinculosLidos])
+
+  // junta sozinho as TAGs com nome claramente igual ao de uma máquina deste banco (uma vez por banco aberto)
+  const [autoFeito, setAutoFeito] = useState('')
+  useEffect(() => {
+    if (!banco || !vinculosLidos || !linhas.length) return
+    const marca = `${chave}|${banco.modificado}|${linhas.length}`
+    if (autoFeito === marca) return
+    setAutoFeito(marca)
+    const novos = vincularAutomatico(linhas, banco.maquinas(), (id) => banco.caminho(id), new Set(Object.keys(vinculos)))
+    if (!novos.length) return
+    const em = new Date().toISOString()
+    const mudancas: Record<string, Vinculo> = Object.fromEntries(
+      novos.map((n) => [n.tag, { banco: chave, no: n.maquina.id, caminho: n.caminho, descricao: n.descricao, por: `${usuario} (automático)`, em, automatico: true, nota: n.nota }]),
+    )
+    void gravarVinculos(raiz, mudancas).then((v) => {
+      setVinculos(v)
+      avisar(`${novos.length} TAG(s) juntadas automaticamente pelo nome. Confira na lista de vínculos.`, 'ok', {
+        rotulo: 'Desfazer',
+        fazer: () => void gravarVinculos(raiz, Object.fromEntries(novos.map((n) => [n.tag, null]))).then(setVinculos),
+      })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [banco, vinculosLidos, linhas])
 
   // banco desatualizado (Power Automate trouxe uma versão nova)
   const atual = arquivos?.find((a) => a.caminho === chave)
@@ -261,12 +284,17 @@ function Arvore(p: {
           const visiveis = ms.filter((m) => !q || `${area} ${m.nome}`.toLowerCase().includes(q))
           if (!visiveis.length) return null
           return (
-            <details key={area} open={!!q || grupos.length < 6}>
+            <details key={area} open={!!q || grupos.length < 6 || visiveis.some((m) => m.id === p.maquina) || undefined}>
               <summary>{area || 'raiz'}</summary>
               {visiveis.map((m) => {
                 const s = p.banco.situacao(m.id)
                 return (
-                  <button key={m.id} className={`banco-maq ${p.maquina === m.id ? 'on' : ''}`} onClick={() => p.escolher(m.id)}>
+                  <button
+                    key={m.id}
+                    ref={p.maquina === m.id ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
+                    className={`banco-maq ${p.maquina === m.id ? 'on' : ''}`}
+                    onClick={() => p.escolher(m.id)}
+                  >
                     <span className="banco-ponto" style={{ background: corSit[s] }} title={s} />
                     <span className="truncate">{m.nome}</span>
                     {vinculadas.has(m.id) && (
@@ -600,6 +628,7 @@ function ListaVinculos({ vinculos, desvincular }: { vinculos: Vinculos; desvincu
                   <small className="block text-cinza">{v.banco}</small>
                 </td>
                 <td className="text-xs text-cinza">
+                  {v.automatico && <span className="banco-auto">automático {v.nota ? `${Math.round(v.nota * 100)}%` : ''}</span>}
                   {v.por}
                   <br />
                   {new Date(v.em).toLocaleDateString('pt-BR')}
