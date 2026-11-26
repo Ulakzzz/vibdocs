@@ -8,6 +8,7 @@ const tag = (i: number) => `VM52-DEMO-AAA-${String(10 * (i + 1)).padStart(3, '0'
 export function linhasDemo(): LinhaControle[] {
   const conds = ['1', '1', '1', '3', '1', '2', '1', '1', '4', '1', '9', '1']
   return NOMES.map((n, i) => ({
+    plano: String(11000 + (i % 3) * 7),
     ordem: String(900000 + i),
     descricao: `VIB_DEMO_${n}`,
     executado: conds[i] !== '9',

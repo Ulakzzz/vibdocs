@@ -1,6 +1,6 @@
-// Moldura das telas de entrada e login: lado preto com a onda, lado branco com o formulário.
+// Moldura das telas de entrada e login: lado preto com a malha de pontos que vibra (A6), lado claro com o formulário.
 import type { ReactNode } from 'react'
-import { Onda } from './Onda'
+import { Malha } from './Malha'
 import { BotaoTema } from './Tema'
 
 export function Marca({ tamanho = 28 }: { tamanho?: number }) {
@@ -16,20 +16,20 @@ export function Marca({ tamanho = 28 }: { tamanho?: number }) {
 export function Moldura({ children }: { children: ReactNode }) {
   return (
     <main className="grid min-h-full lg:grid-cols-[1.15fr_1fr]">
-      <section className="faixas relative flex min-h-64 flex-col justify-between gap-16 overflow-hidden bg-preto p-8 text-white lg:min-h-full lg:p-12">
-        <div className="flex items-center gap-3">
+      <section className="malha-entrada relative flex min-h-64 flex-col justify-between gap-16 overflow-hidden bg-preto p-8 text-white lg:min-h-full lg:p-12">
+        <Malha className="absolute inset-0 h-full w-full" />
+        <div className="relative z-[1] flex items-center gap-3">
           <Marca />
           <span className="titulo text-lg">VibDocs</span>
         </div>
-        <Onda className="absolute inset-x-0 top-1/2 h-[46%] w-full -translate-y-1/2" />
-        <div className="relative max-w-md">
+        <div className="pointer-events-none relative z-[1] max-w-md">
           <h1 className="titulo-grande text-4xl leading-[1.02] lg:text-[3.4rem]">
-            Relatórios de vibração,
+            Vibração medida,
             <br />
-            <span className="vazado">do controle</span>
+            <span className="vazado">relatório</span>
             <br />
             <span className="bloco">
-              <span>ao PDF.</span>
+              <span>pronto.</span>
             </span>
           </h1>
           <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-white/60">

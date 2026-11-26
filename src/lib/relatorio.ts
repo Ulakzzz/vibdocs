@@ -16,6 +16,7 @@ export const USINAS_RELATORIO = ['Barreiro', 'Jeceaba', 'Mineração', 'Floresta
 
 export interface EquipRel {
   local: string // Local de instalação (TAG SAP)
+  plano?: string // Plano de manutenção (vem da planilha)
   descricao: string
   condicao: string // condição usada no relatório (editável)
   condicaoPlanilha?: string // como veio da planilha de controle
@@ -50,7 +51,7 @@ export interface ImagemRef {
 }
 
 /** Área de imagens da página de anomalia (mm): largura útil da folha × altura reservada. */
-export const AREA_IMAGENS_MM = { l: 178, a: 124 }
+export const AREA_IMAGENS_MM = { l: 184, a: 165 }
 
 /** Posição padrão de cada espaço, em % da área (espelha o layout fixo). */
 export const POSICAO_SLOT: Record<Slot, { x: number; y: number; l: number; a: number }> = {
@@ -107,6 +108,8 @@ export interface Relatorio {
   /** 4.1 Equipamentos utilizados */
   aparelho?: string
   software?: string
+  /** Linha "Plataforma Web Dynamox" do modelo: undefined = como está no modelo; '' = remove a linha */
+  plataforma?: string
   /** Condições cujos equipamentos aparecem no quadro de condição. */
   condicoesQuadro: string[]
   /** Condições que geram página de anomalia. */
@@ -204,6 +207,7 @@ export function novoRelatorio(p: {
     .filter((l) => siglaArea(l.local) === p.sigla)
     .map((l) => ({
       local: l.local,
+      plano: l.plano,
       descricao: l.descricao,
       condicao: l.condicao,
       condicaoPlanilha: l.condicao,
@@ -224,7 +228,7 @@ export function novoRelatorio(p: {
     equipe: { coleta: p.analista, analise: p.analista, seloColeta: p.perfil?.selo, seloAnalise: p.perfil?.selo },
     contato: { email: p.perfil?.email ?? '', telefone: p.perfil?.telefone ?? '' },
     art: p.perfil?.art ?? '',
-    aparelho: 'VIBXpert II',
+    aparelho: 'Coletor de Dados VibXpert II',
     software: 'Omnitrend',
     condicoesQuadro: [...PADRAO_QUADRO],
     condicoesAnomalia: [...PADRAO_ANOMALIA],

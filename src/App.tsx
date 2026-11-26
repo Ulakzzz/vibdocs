@@ -32,9 +32,10 @@ import {
 import { historicoDemo, linhasDemo } from './lib/demo'
 import { carregarHistoricoPasta, mesDoNome, montarExecucao, montarHistorico, type Execucao, type FonteHistorico, type Historico } from './lib/historico'
 import { escolherPasta, esquecerPasta, navegadorSuportado, pastaLembrada, reconectar } from './lib/pasta'
+import { obterModelo, visualDoModelo, type VisualModelo } from './lib/modelo'
 import { lerDaPasta, lerLocal, maisRecente, proximaSequencia, salvarEmitido, salvarLocal, salvarNaPasta } from './lib/rascunho'
 import { anomaliaDe, aplicarHistorico, type PerfilTecnico, equipamentosAnomalia, hojeISO, mesmoHistorico, normalizar, novoRelatorio, type Relatorio } from './lib/relatorio'
-import { Previa } from './report/Previa'
+import { AjustarLargura, Previa } from './report/Previa'
 
 type Aba = 'relatorio' | 'equipamentos' | 'anomalias'
 type Estado = 'salvo' | 'salvando' | 'pendente' | 'erro'
@@ -261,9 +262,16 @@ export default function App() {
         const seq = raiz ? await proximaSequencia(raiz, usina, mesRef) : 1
         r = novoRelatorio({ usina, sigla, mesReferencia: mesRef, sequencia: seq, analista, perfil: perfilTecnico, linhas })
       } else {
-        // Rascunho salvo antes de existir o campo "executado": completa pela planilha do mês.
+        // Rascunho salvo antes de existirem os campos "executado" e "plano": completa pela planilha do mês.
         const porLocal = new Map(linhas.map((l) => [l.local, l]))
-        r = { ...r, equipamentos: r.equipamentos.map((e) => (e.executado === undefined && porLocal.has(e.local) ? { ...e, executado: porLocal.get(e.local)!.executado } : e)) }
+        r = {
+          ...r,
+          equipamentos: r.equipamentos.map((e) => {
+            const l = porLocal.get(e.local)
+            if (!l) return e
+            return { ...e, executado: e.executado ?? l.executado, plano: e.plano ?? l.plano }
+          }),
+        }
       }
       if (cancelado) return
       sujo.current = false
@@ -372,6 +380,27 @@ export default function App() {
 
   const [gerandoWord, setGerandoWord] = useState(false)
   const [aviso, setAviso] = useState('')
+
+  // imagens e nomes do modelo .docx, para a prévia/PDF ficarem iguais ao Word
+  const [visual, setVisual] = useState<VisualModelo>()
+  const [versaoModelo, setVersaoModelo] = useState(0)
+  useEffect(() => {
+    const trocou = () => setVersaoModelo((v) => v + 1)
+    window.addEventListener('vibdocs:modelo', trocou)
+    return () => window.removeEventListener('vibdocs:modelo', trocou)
+  }, [])
+  const usinaRel = rel?.usina
+  useEffect(() => {
+    if (!usinaRel) return
+    let vivo = true
+    obterModelo(raiz, usinaRel)
+      .then((m) => (m ? visualDoModelo(m) : undefined))
+      .then((v) => vivo && setVisual(v))
+      .catch(() => vivo && setVisual(undefined))
+    return () => {
+      vivo = false
+    }
+  }, [raiz, usinaRel, versaoModelo])
   const exportarWord = () =>
     executar(async () => {
       if (!rel) return
@@ -379,10 +408,12 @@ export default function App() {
       setAviso('')
       try {
         const { gerarWord, nomeArquivo } = await import('./lib/word') // carregado só quando usado
-        const blob = await gerarWord(rel)
+        const modelo = await obterModelo(raiz, rel.usina)
+        const blob = modelo ? await (await import('./lib/modeloWord')).gerarWordDoModelo(rel, modelo.dados) : await gerarWord(rel)
+        if (!modelo) setAviso('Sem modelo do Word: saiu no layout simples. Carregue o .docx modelo na aba Relatório.')
         const nome = nomeArquivo(rel, 'docx')
         baixar(blob, nome)
-        if (raiz) setAviso(`Word salvo também no SharePoint: ${await salvarEmitido(raiz, rel, nome, blob)}`)
+        if (raiz && modelo) setAviso(`Word salvo também no SharePoint: ${await salvarEmitido(raiz, rel, nome, blob)}`)
       } finally {
         setGerandoWord(false)
       }
@@ -409,7 +440,6 @@ export default function App() {
                 onClick={() => executar(async () => ((await reconectar(lembrada)) ? setRaiz(lembrada) : undefined))}
               >
                 <span className="truncate">Reabrir {lembrada.name}</span>
-                <span aria-hidden>↵</span>
               </button>
             )}
             <button
@@ -417,7 +447,6 @@ export default function App() {
               onClick={() => executar(async () => setRaiz(await escolherPasta()))}
             >
               <span>{lembrada ? 'Escolher outra pasta' : 'Escolher pasta'}</span>
-              <span aria-hidden>⌕</span>
             </button>
             <p className="text-xs text-cinza">PRUFTECHNIK MGS › Integração de Dados Pruftechnik MGS VSB - Documentos</p>
           </div>
@@ -667,6 +696,7 @@ export default function App() {
                   <div className="painel flex h-full flex-col overflow-hidden">
                     <div className="flex shrink-0 items-center gap-3 border-b border-linha px-4 py-3">
                       <Abas
+                        variante="ponto"
                         ativa={aba}
                         mudar={setAba}
                         itens={[
@@ -680,7 +710,7 @@ export default function App() {
                       </span>
                     </div>
                     <div className="min-h-0 flex-1 overflow-auto">
-                      {aba === 'relatorio' && <PainelRelatorio r={rel} atualizar={atualizar} tecnicos={tecnicos} />}
+                      {aba === 'relatorio' && <PainelRelatorio r={rel} atualizar={atualizar} tecnicos={tecnicos} raiz={raiz} />}
                       {aba === 'equipamentos' && <PainelEquipamentos r={rel} atualizar={atualizar} />}
                       {aba === 'anomalias' && (
                         <PainelAnomalias r={rel} atualizar={atualizar} selecionado={anomaliaSel} selecionar={setAnomaliaSel} />
@@ -693,15 +723,18 @@ export default function App() {
                     <Separator className="divisor mx-1.5 w-2" />
                     <Panel defaultSize="48" minSize="20">
                       <div className="painel h-full overflow-auto bg-[var(--t-tela-previa)]">
-                        <Previa
-                          r={rel}
-                          editarImagens={(local, imagens) =>
-                            atualizar((x) => {
-                              const eq = x.equipamentos.find((q) => q.local === local)
-                              return eq ? { ...x, anomalias: { ...x.anomalias, [local]: { ...anomaliaDe(x, eq), imagens } } } : x
-                            })
-                          }
-                        />
+                        <AjustarLargura>
+                          <Previa
+                            r={rel}
+                            visual={visual}
+                            editarImagens={(local, imagens) =>
+                              atualizar((x) => {
+                                const eq = x.equipamentos.find((q) => q.local === local)
+                                return eq ? { ...x, anomalias: { ...x.anomalias, [local]: { ...anomaliaDe(x, eq), imagens } } } : x
+                              })
+                            }
+                          />
+                        </AjustarLargura>
                       </div>
                     </Panel>
                   </>
@@ -715,7 +748,7 @@ export default function App() {
       {/* Impressão/PDF: a prévia fora do layout de painéis, em largura A4 real. */}
       {rel && (
         <div className="so-impressao">
-          <Previa r={rel} />
+          <Previa r={rel} visual={visual} />
         </div>
       )}
     </>

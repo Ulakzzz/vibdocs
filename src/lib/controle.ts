@@ -6,6 +6,7 @@ export const USINAS = ['Barreiro', 'Jeceaba', 'Mineração'] as const
 export type Usina = (typeof USINAS)[number]
 
 export interface LinhaControle {
+  plano?: string // Plano de manutenção (coluna do quadro do relatório)
   ordem: string
   descricao: string
   executado: boolean
@@ -90,6 +91,7 @@ export function lerXlsxVibracao(buf: ArrayBuffer, nomeArquivo: string): LinhaCon
   const cab = linhas[iCab].map((c) => txt(c).toLowerCase())
   const col = (re: RegExp) => cab.findIndex((c) => re.test(c))
   const c = {
+    plano: col(/^plano/),
     ordem: col(/^ordem/),
     desc: col(/descri/),
     exec: col(/execu/),
@@ -111,6 +113,7 @@ export function lerXlsxVibracao(buf: ArrayBuffer, nomeArquivo: string): LinhaCon
     const local = txt(r[c.local])
     if (!local || /local de instala/i.test(local)) continue
     out.push({
+      plano: c.plano >= 0 ? txt(r[c.plano]) : undefined,
       ordem: txt(r[c.ordem]),
       descricao: txt(r[c.desc]),
       executado: r[c.exec] === true || /^(true|sim|verdadeiro)$/i.test(txt(r[c.exec])),

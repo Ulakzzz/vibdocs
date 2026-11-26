@@ -35,15 +35,28 @@ export function TextoLongo(p: { valor: string; mudar: (v: string) => void; place
 }
 
 /** Abas com indicador que desliza até a aba ativa. */
-export function Abas<T extends string>({ itens, ativa, mudar }: { itens: [T, ReactNode][]; ativa: T; mudar: (t: T) => void }) {
+export function Abas<T extends string>({
+  itens,
+  ativa,
+  mudar,
+  variante = 'pilula',
+}: {
+  itens: [T, ReactNode][]
+  ativa: T
+  mudar: (t: T) => void
+  /** 'pilula' = fundo amarelo que desliza (E1); 'ponto' = ponto amarelo sob a aba ativa (E2) */
+  variante?: 'pilula' | 'ponto'
+}) {
   const caixa = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ left: 0, width: 0 })
   useLayoutEffect(() => {
     const el = caixa.current?.querySelector<HTMLButtonElement>(`[data-aba="${ativa}"]`)
-    if (el) setPos({ left: el.offsetLeft, width: el.offsetWidth })
-  }, [ativa, itens])
+    if (!el) return
+    if (variante === 'ponto') setPos({ left: el.offsetLeft + el.offsetWidth / 2 - 3.5, width: 7 })
+    else setPos({ left: el.offsetLeft, width: el.offsetWidth })
+  }, [ativa, itens, variante])
   return (
-    <div className="abas" role="tablist" ref={caixa}>
+    <div className={`abas ${variante === 'ponto' ? 'ponto' : ''}`} role="tablist" ref={caixa}>
       <span className="indicador" style={pos} aria-hidden />
       {itens.map(([id, rotulo]) => (
         <button key={id} role="tab" data-aba={id} aria-selected={id === ativa} onClick={() => mudar(id)}>

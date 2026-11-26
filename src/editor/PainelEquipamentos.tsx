@@ -1,29 +1,105 @@
 // Triagem: condição de cada equipamento (editável), "Normal" rápido, mapa de condição dos meses
 // anteriores e equipamentos adicionados à mão.
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { CONDICOES } from '../lib/condicao'
 import { mesCurto } from '../lib/historico'
-import { TODAS_CONDICOES, type EquipRel, type Relatorio } from '../lib/relatorio'
+import { condicaoNoMes, reincidenciaAuto, TODAS_CONDICOES, type EquipRel, type Relatorio } from '../lib/relatorio'
 import { Abas, btn, btnMini } from './campos'
 
 type Atualizar = (f: (r: Relatorio) => Relatorio) => void
 
-/** Quadradinhos com a condição das últimas medições (mais antiga à esquerda). */
-function MapaCondicao({ r, e }: { r: Relatorio; e: EquipRel }) {
-  const meses = Object.entries(r.historico?.condicoes[e.local] ?? {})
-    .sort(([a], [b]) => a.localeCompare(b))
-    .slice(-6)
-  const vazios = 6 - meses.length
+const ANOMALIA = ['2', '3', '4']
+const LETRAS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
+const CHAVE_MESES = 'vibdocs.mesesHistorico'
+
+/** Os n meses de calendário que terminam no mês do relatório (mais antigo primeiro). */
+function ultimosMeses(mesRef: string, n: number) {
+  const [a, m] = mesRef.split('-').map(Number)
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date(a, m - 1 - (n - 1 - i), 1)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  })
+}
+
+/** Linha do tempo (B3): um ponto por mês; no mês do relatório, pré-alerta, alerta e alarme pulsam na sua cor. */
+function LinhaHistorico(p: { r: Relatorio; e: EquipRel; meses: string[]; aberto: boolean; alternar: () => void }) {
+  const { r, e, meses } = p
   return (
-    <span className="mapa" aria-label="Condição nas medições anteriores">
-      {Array.from({ length: vazios }, (_, i) => (
-        <span key={`v${i}`} className="vazio" />
-      ))}
-      {meses.map(([m, c]) => {
-        const k = CONDICOES[c] ?? CONDICOES.X
-        return <span key={m} style={{ background: k.cor }} title={`${mesCurto(m)}: ${c} – ${k.nome}`} />
+    <button
+      type="button"
+      className={`hist ${p.aberto ? 'aberto' : ''}`}
+      onClick={p.alternar}
+      aria-expanded={p.aberto}
+      aria-label={`Histórico de ${e.local}: ver detalhes`}
+    >
+      {meses.map((m) => {
+        const c = condicaoNoMes(r, e, m)
+        const k = CONDICOES[c]
+        const agora = m === r.mesReferencia
+        if (!c || !k) return <i key={m} className={`sem ${agora ? 'agora' : ''}`} title={`${mesCurto(m)}: sem medição`} />
+        const estilo = { background: k.cor, '--c': k.cor } as React.CSSProperties
+        return (
+          <i
+            key={m}
+            className={`${agora ? 'agora' : ''} ${agora && ANOMALIA.includes(c) ? 'pulsa' : ''}`}
+            style={estilo}
+            title={`${mesCurto(m)}: ${c} – ${k.nome}`}
+          />
+        )
       })}
-    </span>
+    </button>
+  )
+}
+
+/** Detalhe (B4): a área inteira mês a mês, um ponto por equipamento, com o equipamento escolhido em destaque. */
+function DetalheHistorico({ r, e, meses }: { r: Relatorio; e: EquipRel; meses: string[] }) {
+  const reinc = reincidenciaAuto(r, e)
+  const colunas = Math.min(10, Math.max(4, Math.ceil(Math.sqrt(r.equipamentos.length * 1.6))))
+  return (
+    <div className="hist-detalhe">
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <span className="tag text-white">{e.local}</span>
+        <span className="text-white/60">{e.descricao}</span>
+        <span className="ml-auto text-xs text-white/60">
+          {reinc ? (
+            <>
+              Reincidente desde <b className="text-white">{reinc}</b>
+            </>
+          ) : (
+            'Sem reincidência'
+          )}
+        </span>
+      </div>
+      <div className="hist-matriz">
+        {meses.map((m) => {
+          const c = condicaoNoMes(r, e, m)
+          const k = CONDICOES[c]
+          return (
+            <div key={m} className="mes">
+              <div className="pontos-mes" style={{ gridTemplateColumns: `repeat(${colunas}, 9px)` }}>
+                {r.equipamentos.map((x) => {
+                  const cx = condicaoNoMes(r, x, m)
+                  const kx = CONDICOES[cx]
+                  const tipo = ANOMALIA.includes(cx) ? 'anom' : cx === '1' ? 'normal' : cx ? 'outra' : 'sem'
+                  return (
+                    <i
+                      key={x.local}
+                      className={`${tipo} ${x.local === e.local ? 'eu' : ''}`}
+                      style={ANOMALIA.includes(cx) ? { background: kx?.cor } : undefined}
+                      title={`${x.local}: ${cx ? `${cx} – ${kx?.nome}` : 'sem medição'}`}
+                    />
+                  )
+                })}
+              </div>
+              <small>{mesCurto(m)}</small>
+              <span className="cond" style={k ? { background: k.cor, color: k.texto } : undefined}>
+                {c ? `${c} · ${k?.nome ?? ''}` : '—'}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -49,6 +125,14 @@ function SeletorCondicao({ valor, mudar }: { valor: string; mudar: (c: string) =
 export function PainelEquipamentos({ r, atualizar }: { r: Relatorio; atualizar: Atualizar }) {
   const [filtro, setFiltro] = useState<'todos' | 'anomalias'>('todos')
   const [novo, setNovo] = useState({ local: '', descricao: '', condicao: '3' })
+  const [nMeses, setNMeses] = useState(() => Number(localStorage.getItem(CHAVE_MESES)) || 6)
+  const [aberto, setAberto] = useState<string>()
+  const meses = ultimosMeses(r.mesReferencia, nMeses)
+  const mudarMeses = (d: number) => {
+    const n = Math.min(12, Math.max(2, nMeses + d))
+    setNMeses(n)
+    localStorage.setItem(CHAVE_MESES, String(n))
+  }
 
   const mudarCondicao = (local: string, condicao: string) =>
     atualizar((x) => ({ ...x, equipamentos: x.equipamentos.map((e) => (e.local === local ? { ...e, condicao } : e)) }))
@@ -80,7 +164,16 @@ export function PainelEquipamentos({ r, atualizar }: { r: Relatorio; atualizar: 
             ['anomalias', `Geram anomalia ${nAnom}`],
           ]}
         />
-        <p className="text-xs text-cinza">Marque como Normal o que não precisa de página. A condição original da planilha fica guardada.</p>
+        <p className="min-w-0 flex-1 text-xs text-cinza">Marque como Normal o que não precisa de página. A condição original da planilha fica guardada.</p>
+        <div className="passo-meses" role="group" aria-label="Meses no histórico">
+          <button type="button" onClick={() => mudarMeses(-1)} disabled={nMeses <= 2} aria-label="Menos meses">
+            −
+          </button>
+          <span>{nMeses} meses</span>
+          <button type="button" onClick={() => mudarMeses(1)} disabled={nMeses >= 12} aria-label="Mais meses">
+            +
+          </button>
+        </div>
       </div>
 
       <table className="w-full border-collapse text-sm">
@@ -88,8 +181,15 @@ export function PainelEquipamentos({ r, atualizar }: { r: Relatorio; atualizar: 
           <tr className="border-b border-linha text-left text-xs text-cinza">
             <th className="py-2 pr-2 pl-3 font-medium">Local de instalação</th>
             <th className="py-2 pr-2 font-medium">Descrição</th>
-            <th className="py-2 pr-2 font-medium" title="Últimas medições">
-              Histórico
+            <th className="py-2 pr-2 font-medium" title="Meses anteriores (clique no histórico para ver a área mês a mês)">
+              <span className="hist-meses" aria-hidden>
+                {meses.map((m) => (
+                  <i key={m} className={m === r.mesReferencia ? 'agora' : ''} title={mesCurto(m)}>
+                    {LETRAS[Number(m.slice(5)) - 1]}
+                  </i>
+                ))}
+              </span>
+              <span className="sr-only">Histórico</span>
             </th>
             <th className="py-2 pr-2 font-medium">Condição</th>
             <th className="py-2" />
@@ -99,7 +199,8 @@ export function PainelEquipamentos({ r, atualizar }: { r: Relatorio; atualizar: 
           {lista.map((e) => {
             const alterada = e.condicaoPlanilha !== undefined && e.condicaoPlanilha !== e.condicao
             return (
-              <tr key={e.local} className="linha-viva acoes-no-hover border-b border-linha/70 align-middle">
+              <Fragment key={e.local}>
+              <tr className="linha-viva acoes-no-hover border-b border-linha/70 align-middle">
                 <td className="py-2 pr-2 pl-3 whitespace-nowrap">
                   <span className="tag">{e.local}</span>
                   {e.manual && <span className="ml-1.5 rounded-full bg-sinal-claro px-1.5 text-[11px]">manual</span>}
@@ -108,7 +209,13 @@ export function PainelEquipamentos({ r, atualizar }: { r: Relatorio; atualizar: 
                   {e.descricao}
                 </td>
                 <td className="py-2 pr-2">
-                  <MapaCondicao r={r} e={e} />
+                  <LinhaHistorico
+                    r={r}
+                    e={e}
+                    meses={meses}
+                    aberto={aberto === e.local}
+                    alternar={() => setAberto(aberto === e.local ? undefined : e.local)}
+                  />
                 </td>
                 <td className="py-2 pr-2 whitespace-nowrap">
                   <SeletorCondicao valor={e.condicao} mudar={(c) => mudarCondicao(e.local, c)} />
@@ -138,6 +245,14 @@ export function PainelEquipamentos({ r, atualizar }: { r: Relatorio; atualizar: 
                   </span>
                 </td>
               </tr>
+              {aberto === e.local && (
+                <tr className="border-b border-linha/70">
+                  <td colSpan={5} className="py-2 pr-2 pl-3">
+                    <DetalheHistorico r={r} e={e} meses={meses} />
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             )
           })}
         </tbody>

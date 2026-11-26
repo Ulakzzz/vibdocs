@@ -1,14 +1,21 @@
 // Gera um .docx da demonstração (com texto e uma imagem fictícia) pelo Edge, clicando em "Exportar Word".
-// Uso: node scripts/word-teste.mjs [url] [saida.docx]
+// Uso: node scripts/word-teste.mjs [url] [saida.docx] [modelo.docx]
+// Com modelo, o .docx é carregado na aba Relatório e o Word sai preenchido dentro dele.
 import { chromium } from 'playwright-core'
 
 const url = process.argv[2] ?? 'http://localhost:5173/?demo'
 const saida = process.argv[3] ?? 'teste-vibdocs.docx'
+const modelo = process.argv[4]
 
 const navegador = await chromium.launch({ channel: 'msedge' })
 const pagina = await (await navegador.newContext({ acceptDownloads: true })).newPage()
 pagina.on('pageerror', (e) => console.error('erro na página:', e.message))
 await pagina.goto(url)
+if (modelo) {
+  await pagina.getByRole('tab', { name: /^Relatório/ }).click()
+  await pagina.getByLabel('Arquivo do modelo do Word').setInputFiles(modelo)
+  await pagina.locator('[data-modelo]').waitFor()
+}
 await pagina.getByRole('tab', { name: /^Anomalias/ }).click()
 
 // Eixo 01: texto padrão + observação do técnico

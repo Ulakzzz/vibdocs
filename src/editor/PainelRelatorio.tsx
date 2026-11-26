@@ -11,6 +11,7 @@ import {
   type Relatorio,
 } from '../lib/relatorio'
 import { btnMini, Campo, Texto } from './campos'
+import { ModeloWord } from './ModeloWord'
 
 type Atualizar = (f: (r: Relatorio) => Relatorio) => void
 
@@ -90,7 +91,17 @@ function Tecnico(p: {
   )
 }
 
-export function PainelRelatorio({ r, atualizar, tecnicos = [] }: { r: Relatorio; atualizar: Atualizar; tecnicos?: PerfilTecnico[] }) {
+export function PainelRelatorio({
+  r,
+  atualizar,
+  tecnicos = [],
+  raiz,
+}: {
+  r: Relatorio
+  atualizar: Atualizar
+  tecnicos?: PerfilTecnico[]
+  raiz?: FileSystemDirectoryHandle
+}) {
   const set = <K extends keyof Relatorio>(k: K, v: Relatorio[K]) => atualizar((x) => ({ ...x, [k]: v }))
   const contagem: Record<string, number> = {}
   for (const e of r.equipamentos) contagem[e.condicao] = (contagem[e.condicao] ?? 0) + 1
@@ -184,6 +195,13 @@ export function PainelRelatorio({ r, atualizar, tecnicos = [] }: { r: Relatorio;
         <Campo rotulo="Software (4.1)">
           <Texto valor={r.software ?? ''} mudar={(v) => set('software', v)} />
         </Campo>
+        <Campo rotulo="Plataforma (4.1)" dica="Vazio = mantém a linha do modelo. Escreva “-” para tirar a linha.">
+          <Texto
+            valor={r.plataforma ?? ''}
+            placeholder="como no modelo"
+            mudar={(v) => set('plataforma', v === '' ? undefined : v.trim() === '-' ? '' : v)}
+          />
+        </Campo>
         <Campo rotulo="Meses no quadro de condição" dica="Inclui o mês do relatório. Os anteriores vêm do histórico.">
           <Texto
             tipo="number"
@@ -201,6 +219,8 @@ export function PainelRelatorio({ r, atualizar, tecnicos = [] }: { r: Relatorio;
         />
         Incluir página de indicadores (execução, anomalias e reincidência)
       </label>
+
+      <ModeloWord raiz={raiz} usina={r.usina} />
 
       <div className="rounded-[14px] bg-nevoa p-3 text-xs leading-relaxed">
         <b>Histórico: </b>

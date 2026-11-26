@@ -160,3 +160,102 @@ export function graficosDoRelatorio(ind: Indicadores, usina = '') {
     }),
   }
 }
+
+// ---------- gráficos no formato do modelo .docx (um mês, barras agrupadas e legenda à direita) ----------
+export const LARGURA_MODELO = 700
+export const ALTURA_MODELO = 228
+
+/** Escala do eixo como o Word faz: passo "redondo" com no máximo 8 divisões. */
+function escalaWord(vmax: number) {
+  const alvo = Math.max(vmax, 0.0001) * 1.05
+  for (const passo of [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500]) {
+    const n = Math.ceil(alvo / passo)
+    if (n <= 8) return { max: Math.max(n, 1) * passo, passo }
+  }
+  return { max: Math.ceil(alvo), passo: Math.ceil(alvo / 5) }
+}
+
+export function svgGraficoModelo(titulo: string, series: { nome: string; cor: string; valor?: number }[]): string {
+  const L = LARGURA_MODELO
+  const A = ALTURA_MODELO
+  const area = { x: L * 0.149, y: A * 0.253, l: L * 0.247, a: A * 0.617 }
+  const { max, passo } = escalaWord(Math.max(0, ...series.map((s) => s.valor ?? 0)))
+  const y = (v: number) => area.y + area.a - (v / max) * area.a
+  const p: string[] = []
+  p.push(`<rect x="0.5" y="0.5" width="${L - 1}" height="${A - 1}" fill="#fff" stroke="#000"/>`)
+  p.push(`<text x="${L / 2}" y="20" font-size="11" font-weight="bold" text-anchor="middle">${esc(titulo)}</text>`)
+  for (let v = 0; v <= max + 1e-9; v += passo) {
+    const t = Math.round(v * 10) / 10
+    p.push(`<text x="${area.x - 6}" y="${y(t) + 3.5}" font-size="9" text-anchor="end">${String(t).replace('.', ',')}</text>`)
+    p.push(`<line x1="${area.x - 3}" x2="${area.x}" y1="${y(t)}" y2="${y(t)}" stroke="#000"/>`)
+  }
+  p.push(`<line x1="${area.x}" x2="${area.x}" y1="${area.y}" y2="${area.y + area.a}" stroke="#000"/>`)
+  p.push(`<line x1="${area.x}" x2="${area.x + area.l}" y1="${area.y + area.a}" y2="${area.y + area.a}" stroke="#000"/>`)
+  // barras agrupadas de uma categoria (espaçamento padrão do Word: 150%)
+  const total = area.l / 2.5
+  const barra = total / Math.max(1, series.length)
+  const x0 = area.x + (area.l - total) / 2
+  series.forEach((s, i) => {
+    const v = s.valor ?? 0
+    if (!v) return
+    const x = x0 + i * barra
+    p.push(`<rect x="${x}" y="${y(v)}" width="${barra}" height="${area.y + area.a - y(v)}" fill="${s.cor}" stroke="#000" stroke-width="1"/>`)
+    p.push(`<text x="${x + barra / 2}" y="${y(v) - 5}" font-size="9" font-weight="bold" text-anchor="middle">${v}</text>`)
+  })
+  // legenda
+  const lg = { x: L * 0.63, y: A * 0.37, l: L * 0.35, a: Math.max(A * 0.18, series.length * 22 + 12) }
+  p.push(`<rect x="${lg.x}" y="${lg.y}" width="${lg.l}" height="${lg.a}" fill="#fff" stroke="#000" stroke-width="0.6"/>`)
+  series.forEach((s, i) => {
+    const yy = lg.y + 16 + i * 22
+    p.push(`<rect x="${lg.x + 8}" y="${yy - 6}" width="6" height="6" fill="${s.cor}" stroke="#000" stroke-width="0.5"/>`)
+    p.push(`<text x="${lg.x + 18}" y="${yy}" font-size="8.5" font-weight="bold">${esc(s.nome)}</text>`)
+  })
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${L} ${A}" width="${L}" height="${A}" font-family="Arial, Helvetica, sans-serif">${p.join('')}</svg>`
+}
+
+type SeriesModelo = Partial<Record<'execucao' | 'anomalias' | 'reincidencia', { titulo: string; series: { nome: string; cor: string }[] }>>
+
+/** Os três gráficos do mês do relatório, com títulos, nomes e cores do modelo (ou os do DWS, sem modelo). */
+export function graficosDoMes(ind: Indicadores, mes: string, doModelo: SeriesModelo = {}) {
+  const ex = ind.execucao.find((x) => x.mes === mes)
+  const an = ind.anomalias.find((x) => x.mes === mes)
+  const re = ind.reincidencia.find((x) => x.mes === mes)
+  const padrao: Required<SeriesModelo> = {
+    execucao: {
+      titulo: 'Índice de Execução',
+      series: [
+        { nome: 'Posições Planejadas', cor: '#000080' },
+        { nome: 'Posições Executadas', cor: '#008000' },
+        { nome: 'Posições Indisponíveis', cor: '#00CCFF' },
+      ],
+    },
+    anomalias: {
+      titulo: 'Indicador de Anomalias',
+      series: [
+        { nome: 'Anomalias em Pré-Alerta', cor: '#FFFF00' },
+        { nome: 'Anomalias em Alerta', cor: '#FFC000' },
+        { nome: 'Anomalias em Alarme', cor: '#FF0000' },
+      ],
+    },
+    reincidencia: {
+      titulo: 'Índice de Reincidências',
+      series: [
+        { nome: 'Total de Anomalias', cor: '#000000' },
+        { nome: 'Anomalias Reincidentes', cor: '#800000' },
+        { nome: 'Anomalias Indisponíveis', cor: '#9999FF' },
+      ],
+    },
+  }
+  // mesma regra do preenchimento do Word (modeloWord.ts): o valor sai pelo nome da série
+  const valor = (tipo: string, nome: string) => {
+    const s = nome.toLowerCase()
+    if (tipo === 'execucao') return /planejad/.test(s) ? ex?.planejadas : /executad/.test(s) && !/n[ãa]o/.test(s) ? ex?.executadas : ex?.naoExecutadas
+    if (tipo === 'anomalias') return /pr[ée]|monitor/.test(s) ? an?.monitoraveis : /alarme/.test(s) ? an?.alarme : /alerta/.test(s) ? an?.alerta : undefined
+    return /total/.test(s) ? re?.total : /reincident/.test(s) ? re?.reincidentes : undefined
+  }
+  const um = (tipo: 'execucao' | 'anomalias' | 'reincidencia') => {
+    const g = doModelo[tipo] ?? padrao[tipo]
+    return svgGraficoModelo(g.titulo, g.series.map((s) => ({ ...s, valor: valor(tipo, s.nome) })))
+  }
+  return { execucao: um('execucao'), anomalias: um('anomalias'), reincidencia: um('reincidencia') }
+}
