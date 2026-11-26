@@ -2,7 +2,8 @@
 // Cada ponto tem uma "mola" própria: a amplitude sobe e desce suavemente em vez de acender e apagar,
 // as ondas nascem conforme o cursor anda (mais rápido = onda mais forte) e se espalham com frente larga.
 // Sem o cursor por perto, um ponto imaginário passeia devagar para a malha não ficar parada.
-// Com movimento reduzido, a malha fica estática.
+// Anima sempre: no Windows com "efeitos de animação" desligados o navegador pede movimento reduzido,
+// e a malha ficava toda apagada (sem resposta ao cursor).
 import { useEffect, useRef } from 'react'
 
 interface OndaMalha {
@@ -18,7 +19,6 @@ export function Malha({ className = '', passo = 26 }: { className?: string; pass
   useEffect(() => {
     const c = tela.current!
     const g = c.getContext('2d')!
-    const reduzido = matchMedia('(prefers-reduced-motion: reduce)').matches
     let L = 0
     let A = 0
     let cols = 0
@@ -121,15 +121,12 @@ export function Malha({ className = '', passo = 26 }: { className?: string; pass
           }
         }
       }
-      if (!reduzido) quadro = requestAnimationFrame(desenhar)
+      quadro = requestAnimationFrame(desenhar)
     }
 
     ajustar()
     quadro = requestAnimationFrame(desenhar)
-    const obs = new ResizeObserver(() => {
-      ajustar()
-      if (reduzido) requestAnimationFrame(desenhar)
-    })
+    const obs = new ResizeObserver(ajustar)
     obs.observe(c)
     addEventListener('pointermove', mover)
     return () => {

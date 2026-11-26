@@ -4,8 +4,9 @@ import { GerenciarUsuarios, MeuPerfil } from './auth/Contas'
 import { TelaLogin } from './auth/TelaLogin'
 import { Abas, btn, btnFantasma, btnPri } from './editor/campos'
 import { calcularIndicadores } from './lib/indicadores'
-import { Contador } from './ui/Contador'
-import { IcAnomalia, IcEquipamentos, IcMais, IcPrevia, IcRelatorio } from './ui/Icones'
+import { Carregando, Contador, Copiar } from './ui/Contador'
+import { comTransicao } from './ui/transicao'
+import { IcAnomalia, IcEquipamentos, IcInicio, IcMais, IcPrevia, IcRelatorio } from './ui/Icones'
 import { Marca, Moldura } from './ui/Moldura'
 import { BotaoTema } from './ui/Tema'
 import {
@@ -32,10 +33,11 @@ import {
 import { historicoDemo, linhasDemo } from './lib/demo'
 import { carregarHistoricoPasta, mesDoNome, montarExecucao, montarHistorico, type Execucao, type FonteHistorico, type Historico } from './lib/historico'
 import { escolherPasta, esquecerPasta, navegadorSuportado, pastaLembrada, reconectar } from './lib/pasta'
-import { obterModelo, visualDoModelo, type VisualModelo } from './lib/modelo'
+import { guardarModelo, obterModelo, visualDoModelo, type VisualModelo } from './lib/modelo'
 import { lerDaPasta, lerLocal, maisRecente, proximaSequencia, salvarEmitido, salvarLocal, salvarNaPasta } from './lib/rascunho'
-import { anomaliaDe, aplicarHistorico, type PerfilTecnico, equipamentosAnomalia, hojeISO, mesmoHistorico, normalizar, novoRelatorio, type Relatorio } from './lib/relatorio'
+import { anomaliaDe, aplicarHistorico, artDaUsina, type PerfilTecnico, equipamentosAnomalia, hojeISO, mesmoHistorico, normalizar, novoRelatorio, type ImagemRef, type Relatorio } from './lib/relatorio'
 import { AjustarLargura, Previa } from './report/Previa'
+import { Inicio } from './inicio/Inicio'
 
 type Aba = 'relatorio' | 'equipamentos' | 'anomalias'
 type Estado = 'salvo' | 'salvando' | 'pendente' | 'erro'
@@ -89,7 +91,7 @@ export default function App() {
       .ler()
       .then((l) =>
         setTecnicos(
-          l.filter((u) => u.ativo).map((u) => ({ nome: nomeNoRelatorio(u), email: u.email, telefone: u.telefone, art: u.art, selo: u.selo })),
+          l.filter((u) => u.ativo).map((u) => ({ nome: nomeNoRelatorio(u), email: u.email, telefone: u.telefone, selo: u.selo })),
         ),
       )
       .catch(() => setTecnicos([]))
@@ -99,7 +101,6 @@ export default function App() {
     nome: analista,
     email: usuario.email,
     telefone: usuario.telefone,
-    art: usuario.art,
     selo: usuario.selo,
   }
   const usuarioRef = useRef(analista)
@@ -108,6 +109,10 @@ export default function App() {
   // ---------- relatório em edição ----------
   const [rel, setRel] = useState<Relatorio>()
   const [aba, setAba] = useState<Aba>('equipamentos')
+  // depois do login: página inicial (escolha da usina) e só então o editor
+  const [tela, setTela] = useState<'inicio' | 'relatorio'>('inicio')
+  // "continuar de onde parou": mês e área a abrir quando a usina terminar de carregar
+  const pendente = useRef<{ mesRef: string; sigla: string }>(undefined)
   const [anomaliaSel, setAnomaliaSel] = useState<string>()
   const [previaAberta, setPreviaAberta] = useState(true)
   const [estado, setEstado] = useState<Estado>('salvo')
@@ -116,7 +121,11 @@ export default function App() {
 
   useEffect(() => {
     pastaLembrada().then(setLembrada)
-    if (new URLSearchParams(location.search).has('demo')) abrirDemo()
+    const q = new URLSearchParams(location.search)
+    if (q.has('demo')) {
+      abrirDemo()
+      if (q.has('inicio')) setTela('inicio')
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -151,7 +160,7 @@ export default function App() {
 
   // Pasta conectada: histórico de todas as planilhas de controle da usina (com cache no navegador).
   useEffect(() => {
-    if (!raiz || !usuario) return
+    if (!raiz || !usuario || tela !== 'relatorio') return
     let cancelado = false
     setHist(undefined)
     setCarregandoHist('lendo histórico…')
@@ -166,18 +175,20 @@ export default function App() {
     return () => {
       cancelado = true
     }
-  }, [raiz, usina, usuario])
+  }, [raiz, usina, usuario, tela])
 
   // Pasta conectada: meses disponíveis da usina.
   useEffect(() => {
-    if (!raiz) return
+    if (!raiz || tela !== 'relatorio') return
     executar(async () => {
       const m = await mesesDisponiveis(raiz, usina as (typeof USINAS)[number])
       setMeses(m)
       const anos = Object.keys(m).sort()
-      setMes(anos.length ? `${anos.at(-1)}/${m[anos.at(-1)!].at(-1)}` : '')
+      const [pa, pm] = pendente.current?.mesRef.split('-') ?? []
+      const pedido = pa && m[pa]?.find((x) => x.startsWith(pm))
+      setMes(pedido ? `${pa}/${pedido}` : anos.length ? `${anos.at(-1)}/${m[anos.at(-1)!].at(-1)}` : '')
     })
-  }, [raiz, usina, executar])
+  }, [raiz, usina, executar, tela])
 
   // Pasta conectada: lê a planilha do mês.
   useEffect(() => {
@@ -187,7 +198,9 @@ export default function App() {
       const l = await lerAbaVibracao(await localizarPlanilha(raiz, usina as (typeof USINAS)[number], ano, mesPasta))
       setLinhas(l)
       const s = [...new Set(l.map((x) => siglaArea(x.local)))].sort()
-      setSigla((atual) => (s.includes(atual) ? atual : s[0] ?? ''))
+      const pedida = pendente.current?.sigla
+      pendente.current = undefined
+      setSigla((atual) => (pedida && s.includes(pedida) ? pedida : s.includes(atual) ? atual : (s[0] ?? '')))
     })
   }, [raiz, usina, mes, executar])
 
@@ -260,7 +273,7 @@ export default function App() {
       let r = maisRecente(local, pasta)
       if (!r) {
         const seq = raiz ? await proximaSequencia(raiz, usina, mesRef) : 1
-        r = novoRelatorio({ usina, sigla, mesReferencia: mesRef, sequencia: seq, analista, perfil: perfilTecnico, linhas })
+        r = novoRelatorio({ usina, sigla, mesReferencia: mesRef, sequencia: seq, analista, perfil: perfilTecnico, linhas, art: artDaUsina(usina) })
       } else {
         // Rascunho salvo antes de existirem os campos "executado" e "plano": completa pela planilha do mês.
         const porLocal = new Map(linhas.map((l) => [l.local, l]))
@@ -300,6 +313,7 @@ export default function App() {
     setSigla([...new Set(l.map((x) => siglaArea(x.local)))].sort()[0] ?? '')
     setFonteManual(nome)
     setMesManual(mes)
+    setTela('relatorio')
     setHist(historico?.length ? { historico: montarHistorico(historico), execucao: montarExecucao(historico), fonte: nome } : undefined)
   }
 
@@ -324,9 +338,10 @@ export default function App() {
     carregarManual(FONTE_DEMO, linhasDemo(), mes, historicoDemo(mes))
   }
 
-  const novoAvulso = () =>
+  const novoAvulso = (alvo: string = usina) =>
     executar(async () => {
       if (rel && sujo.current) await salvar(rel)
+      const usina = alvo
       const r = novoRelatorio({
         usina,
         sigla: 'NOVA',
@@ -336,11 +351,36 @@ export default function App() {
         perfil: perfilTecnico,
         linhas: [],
         avulso: true,
+        art: artDaUsina(usina),
       })
       setFonteManual((f) => f ?? 'relatório avulso')
       sujo.current = true
       setRel(r)
       setAba('relatorio')
+      setTela('relatorio')
+    })
+
+  const abrirUsina = (u: string) =>
+    comTransicao(() => {
+      if (rel?.avulso) setRel(undefined)
+      setUsina(u)
+      setTela('relatorio')
+    })
+
+  const continuar = (r: Relatorio) =>
+    executar(async () => {
+      if (rel && sujo.current) await salvar(rel)
+      sujo.current = false
+      if (r.avulso) {
+        setRel(r)
+        setAba('relatorio')
+      } else {
+        setRel(undefined)
+        pendente.current = { mesRef: r.mesReferencia, sigla: r.sigla }
+        if (!raiz && linhas.some((l) => siglaArea(l.local) === r.sigla)) setSigla(r.sigla)
+        setUsina(r.usina)
+      }
+      setTela('relatorio')
     })
 
   const sair = () =>
@@ -352,6 +392,7 @@ export default function App() {
       }
       setRaiz(undefined)
       setFonteManual(undefined)
+      setTela('inicio')
       setLinhas([])
       setRel(undefined)
     })
@@ -362,6 +403,7 @@ export default function App() {
       sujo.current = false
       encerrarSessao()
       setUsuario(undefined)
+      setTela('inicio')
       setRel(undefined)
       setJanela(undefined)
     })
@@ -382,6 +424,14 @@ export default function App() {
   const [aviso, setAviso] = useState('')
 
   // imagens e nomes do modelo .docx, para a prévia/PDF ficarem iguais ao Word
+  const editarImagens = useCallback(
+    (local: string, imagens: ImagemRef[]) =>
+      atualizar((x) => {
+        const eq = x.equipamentos.find((q) => q.local === local)
+        return eq ? { ...x, anomalias: { ...x.anomalias, [local]: { ...anomaliaDe(x, eq), imagens } } } : x
+      }),
+    [atualizar],
+  )
   const [visual, setVisual] = useState<VisualModelo>()
   const [versaoModelo, setVersaoModelo] = useState(0)
   useEffect(() => {
@@ -401,19 +451,25 @@ export default function App() {
       vivo = false
     }
   }, [raiz, usinaRel, versaoModelo])
-  const exportarWord = () =>
+  // sem modelo do Word: pergunta antes (carregar o .docx agora ou sair no layout padrão)
+  const [pedirModelo, setPedirModelo] = useState(false)
+  const exportarWord = (semModelo = false) =>
     executar(async () => {
       if (!rel) return
+      if (!semModelo && !(await obterModelo(raiz, rel.usina))) {
+        setPedirModelo(true)
+        return
+      }
+      setPedirModelo(false)
       setGerandoWord(true)
       setAviso('')
       try {
         const { gerarWord, nomeArquivo } = await import('./lib/word') // carregado só quando usado
         const modelo = await obterModelo(raiz, rel.usina)
         const blob = modelo ? await (await import('./lib/modeloWord')).gerarWordDoModelo(rel, modelo.dados) : await gerarWord(rel)
-        if (!modelo) setAviso('Sem modelo do Word: saiu no layout simples. Carregue o .docx modelo na aba Relatório.')
         const nome = nomeArquivo(rel, 'docx')
         baixar(blob, nome)
-        if (raiz && modelo) setAviso(`Word salvo também no SharePoint: ${await salvarEmitido(raiz, rel, nome, blob)}`)
+        if (raiz) setAviso(`Word salvo também no SharePoint: ${await salvarEmitido(raiz, rel, nome, blob)}`)
       } finally {
         setGerandoWord(false)
       }
@@ -439,7 +495,7 @@ export default function App() {
                 className={`${btnPri} h-12 w-full justify-between px-4`}
                 onClick={() => executar(async () => ((await reconectar(lembrada)) ? setRaiz(lembrada) : undefined))}
               >
-                <span className="truncate">Reabrir {lembrada.name}</span>
+                <span className="truncate">Abrir Integração de Dados</span>
               </button>
             )}
             <button
@@ -477,7 +533,7 @@ export default function App() {
 
   // ---------- login ----------
   if (repo && !usuario) {
-    if (!sessaoVerificada) return <p className="p-8 text-sm text-cinza">Verificando sessão…</p>
+    if (!sessaoVerificada) return <Carregando texto="Verificando sessão…" />
     return (
       <TelaLogin
         repo={repo}
@@ -519,18 +575,21 @@ export default function App() {
           <div className="mb-4" title="VibDocs">
             <Marca tamanho={32} />
           </div>
-          {abasTrilho.map(([id, nome, Icone]) => (
-            <button key={id} className="trilho-item" aria-current={aba === id ? 'page' : undefined} title={nome} onClick={() => setAba(id)}>
+          <button className="trilho-item" aria-current={tela === 'inicio' ? 'page' : undefined} title="Início" onClick={() => comTransicao(() => setTela('inicio'))}>
+            <IcInicio />
+          </button>
+          {tela === 'relatorio' && abasTrilho.map(([id, nome, Icone]) => (
+            <button key={id} className="trilho-item" aria-current={aba === id ? 'page' : undefined} title={nome} onClick={() => comTransicao(() => setAba(id))}>
               <Icone />
               {id === 'anomalias' && nAnom > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-sinal px-1 text-[10px] font-bold text-preto">
+                <span className="pulso-badge absolute -top-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-sinal px-1 text-[10px] font-bold text-preto">
                   {nAnom}
                 </span>
               )}
             </button>
           ))}
           <div className="my-2 h-px w-8 bg-white/10" />
-          <button className="trilho-item" title="Novo relatório avulso (qualquer usina ou área, fora da planilha)" onClick={novoAvulso}>
+          <button className="trilho-item" title="Novo relatório avulso (qualquer usina ou área, fora da planilha)" onClick={() => novoAvulso()}>
             <IcMais />
           </button>
           <div className="flex-1" />
@@ -574,6 +633,18 @@ export default function App() {
           )}
         </aside>
 
+        {tela === 'inicio' ? (
+          <main className="min-w-0 flex-1 overflow-auto">
+            <Inicio
+              nome={usuario?.nome ?? ''}
+              raiz={raiz}
+              fonte={fonteManual ?? ''}
+              abrirUsina={abrirUsina}
+              continuar={continuar}
+              avulso={(u) => novoAvulso(u)}
+            />
+          </main>
+        ) : (
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Barra superior: caminho Usina / Mês / Área e ações */}
           <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-linha bg-superficie px-5 py-3">
@@ -640,7 +711,7 @@ export default function App() {
                 <IcPrevia />
                 {previaAberta ? 'Fechar prévia' : 'Abrir prévia'}
               </button>
-              <button className={btn} onClick={exportarWord} disabled={!rel || gerandoWord}>
+              <button className={btn} onClick={() => exportarWord()} disabled={!rel || gerandoWord}>
                 {gerandoWord ? 'Gerando Word…' : 'Exportar Word'}
               </button>
               <button className={btnPri} onClick={() => window.print()} disabled={!rel}>
@@ -666,7 +737,7 @@ export default function App() {
           )}
 
           {!rel ? (
-            <p className="p-8 text-sm text-cinza">Carregando o relatório…</p>
+            <Carregando texto="Carregando o relatório…" />
           ) : (
             <>
               {/* Faixa de números do relatório */}
@@ -698,7 +769,7 @@ export default function App() {
                       <Abas
                         variante="ponto"
                         ativa={aba}
-                        mudar={setAba}
+                        mudar={(a) => comTransicao(() => setAba(a))}
                         itens={[
                           ['relatorio', 'Relatório'],
                           ['equipamentos', `Equipamentos ${rel.equipamentos.length}`],
@@ -708,6 +779,7 @@ export default function App() {
                       <span className="tag ml-auto truncate text-sm text-cinza" title="Código do relatório">
                         {rel.codigo}
                       </span>
+                      <Copiar texto={rel.codigo} rotulo="código do relatório" />
                     </div>
                     <div className="min-h-0 flex-1 overflow-auto">
                       {aba === 'relatorio' && <PainelRelatorio r={rel} atualizar={atualizar} tecnicos={tecnicos} raiz={raiz} />}
@@ -727,12 +799,7 @@ export default function App() {
                           <Previa
                             r={rel}
                             visual={visual}
-                            editarImagens={(local, imagens) =>
-                              atualizar((x) => {
-                                const eq = x.equipamentos.find((q) => q.local === local)
-                                return eq ? { ...x, anomalias: { ...x.anomalias, [local]: { ...anomaliaDe(x, eq), imagens } } } : x
-                              })
-                            }
+                            editarImagens={editarImagens}
                           />
                         </AjustarLargura>
                       </div>
@@ -743,7 +810,50 @@ export default function App() {
             </>
           )}
         </div>
+        )}
       </div>
+
+      {pedirModelo && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-6 backdrop-blur-[3px]" onMouseDown={() => setPedirModelo(false)}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="titulo-modelo"
+            className="surgir w-full max-w-md rounded-[20px] border border-linha bg-elevada p-6 shadow-[var(--t-sombra)]"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h2 id="titulo-modelo" className="titulo text-xl">
+              Falta o modelo do Word
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-grafite">
+              Com o .docx modelo do relatório, o Word sai com a capa, a moldura, os logos e os gráficos do modelo. Ele fica guardado
+              {raiz ? ' na pasta do SharePoint (VibDocs/config)' : ' neste navegador'} e só precisa ser escolhido uma vez.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <label className={`${btnPri} cursor-pointer`}>
+                Escolher o modelo .docx
+                <input
+                  type="file"
+                  accept=".docx"
+                  className="sr-only"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (!f || !rel) return
+                    executar(async () => {
+                      await guardarModelo(f, raiz)
+                      window.dispatchEvent(new Event('vibdocs:modelo'))
+                      await exportarWord()
+                    })
+                  }}
+                />
+              </label>
+              <button className={btnFantasma} onClick={() => exportarWord(true)}>
+                Exportar no layout padrão
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Impressão/PDF: a prévia fora do layout de painéis, em largura A4 real. */}
       {rel && (

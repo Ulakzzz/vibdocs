@@ -201,6 +201,8 @@ export function novoRelatorio(p: {
   perfil?: PerfilTecnico
   linhas: LinhaControle[]
   avulso?: boolean
+  /** ART do cabeçalho (a última usada na usina); vazio = a do modelo do Word */
+  art?: string
 }): Relatorio {
   const agora = new Date().toISOString()
   const equipamentos: EquipRel[] = p.linhas
@@ -227,7 +229,7 @@ export function novoRelatorio(p: {
     cidade: cidadePadrao(p.usina),
     equipe: { coleta: p.analista, analise: p.analista, seloColeta: p.perfil?.selo, seloAnalise: p.perfil?.selo },
     contato: { email: p.perfil?.email ?? '', telefone: p.perfil?.telefone ?? '' },
-    art: p.perfil?.art ?? '',
+    art: p.art ?? '',
     aparelho: 'Coletor de Dados VibXpert II',
     software: 'Omnitrend',
     condicoesQuadro: [...PADRAO_QUADRO],
@@ -307,6 +309,10 @@ export function rotulosUsina(usina: string) {
 
 /** Localização padrão da página de anomalia: em Jeceaba é o Local de instalação; nas demais, o nome da área. */
 export const localizacaoPadrao = (r: Relatorio, e: EquipRel) => (r.usina === 'Jeceaba' ? e.local : r.areaTitulo || r.sigla)
+
+/** ART lembrada por usina (a ART é do contrato/relatório, não do técnico). */
+export const artDaUsina = (usina: string) => (typeof localStorage === 'undefined' ? '' : (localStorage.getItem(`vibdocs.art.${usina}`) ?? ''))
+export const lembrarArt = (usina: string, art: string) => localStorage.setItem(`vibdocs.art.${usina}`, art)
 
 /** Texto que os relatórios usam quando o campo não se aplica. */
 export const VAZIO = '**'

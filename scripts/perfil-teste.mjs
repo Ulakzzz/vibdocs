@@ -1,4 +1,4 @@
-// Teste do perfil com selo: modo manual (planilha fictícia), cria conta com telefone, ART e selo,
+// Teste do perfil com selo: modo manual (planilha fictícia), cria conta com telefone e selo; a ART vai na aba Relatório;
 // confere que vão para o relatório e exporta PDF e Word.
 // Uso: node scripts/perfil-teste.mjs [url-base] [pasta-saida]
 import { readFile } from 'node:fs/promises'
@@ -36,7 +36,6 @@ await campo('Nome de exibição').fill('Teste Perfil')
 await campo('E-mail').fill('teste@exemplo.com')
 await campo('Nome completo').fill('Teste Perfil da Silva')
 await campo('Telefone').fill('+55 31 0000-0000')
-await campo('ART').fill('ART-TESTE-123')
 await pagina.locator('input[type=file][accept="image/*"]').setInputFiles({ name: 'selo.png', mimeType: 'image/png', buffer: Buffer.from(selo, 'base64') })
 await pagina.locator('img[alt="Selo de certificação"]').waitFor()
 const senhas = pagina.locator('input[type=password]')
@@ -44,6 +43,10 @@ await senhas.nth(0).fill('vd-teste-77')
 await senhas.nth(1).fill('vd-teste-77')
 await pagina.getByRole('button', { name: 'Criar e entrar' }).click()
 await pagina.locator('.so-impressao .pagina').first().waitFor({ state: 'attached' })
+// a ART é do relatório (não do perfil)
+await pagina.getByRole('tab', { name: /^Relatório/ }).click()
+await pagina.locator('label', { hasText: 'ART (rodapé)' }).locator('input').fill('ART-TESTE-123')
+await pagina.waitForTimeout(300)
 
 const texto = await pagina.locator('.so-impressao').innerText()
 const verificar = {
@@ -55,7 +58,12 @@ const verificar = {
 }
 console.log('no relatório:', verificar)
 
-const [download] = await Promise.all([pagina.waitForEvent('download'), pagina.getByRole('button', { name: 'Exportar Word' }).click()])
+const espera = pagina.waitForEvent('download')
+await pagina.getByRole('button', { name: 'Exportar Word' }).click()
+// sem modelo carregado, o app pergunta: exporta no layout padrão
+const semModelo = pagina.getByRole('button', { name: 'Exportar no layout padrão' })
+if (await semModelo.waitFor({ timeout: 2500 }).then(() => true, () => false)) await semModelo.click()
+const download = await espera
 await download.saveAs(`${saida}/perfil.docx`)
 await pagina.emulateMedia({ media: 'print' })
 await pagina.pdf({ path: `${saida}/perfil.pdf`, preferCSSPageSize: true, printBackground: true })

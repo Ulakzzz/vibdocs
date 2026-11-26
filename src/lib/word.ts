@@ -1,4 +1,6 @@
-// Exportação em Word (.docx) no navegador, com o mesmo conteúdo e layout do PDF (modelo VMN).
+// Word (.docx) SEM o modelo do usuário: monta o documento com a mesma geometria da prévia/PDF
+// (moldura de página, rosto, seções numeradas, gráficos do mês e páginas de anomalia sem cabeçalho).
+// Com o modelo carregado, o Word sai de modeloWord.ts (preenchendo o próprio .docx).
 import {
   AlignmentType,
   BorderStyle,
@@ -8,11 +10,11 @@ import {
   HorizontalPositionRelativeFrom,
   ImageRun,
   Packer,
-  PageNumber,
   Paragraph,
   ShadingType,
   Table,
   TableCell,
+  TableLayoutType,
   TableRow,
   TextRun,
   TextWrappingType,
@@ -24,148 +26,224 @@ import {
 } from 'docx'
 import { CONDICOES, severidade } from './condicao'
 import { blobImagem } from './imagens'
-import { ALTURA as ALTURA_GRAFICO, LARGURA as LARGURA_GRAFICO, graficosDoRelatorio, svgParaPng } from '../report/graficos'
 import { mesCurto } from './historico'
 import { calcularIndicadores } from './indicadores'
+import { ALTURA_MODELO, graficosDoMes, LARGURA_MODELO, svgParaPng } from '../report/graficos'
 import {
   anomaliaDe,
   AREA_IMAGENS_MM,
-  posicaoLivre,
   colunasQuadro,
   condicaoNoMes,
   dataPorExtenso,
-  localizacaoPadrao,
-  reincidenciaFinal,
-  rotulosUsina,
-  VAZIO,
   equipamentosAnomalia,
   equipamentosQuadro,
   juntar,
-  type ImagemRef,
+  localizacaoPadrao,
+  posicaoLivre,
+  reincidenciaFinal,
+  rotulosUsina,
+  VAZIO,
   type Relatorio,
-  type Slot,
 } from './relatorio'
 
-// A4 em twips (1/20 pt) e margens de 2 cm.
+// A4 em twips, margens de 1,27 cm (como o modelo)
 const PAG_L = 11906
 const PAG_A = 16838
-const MARGEM = 1134
-const UTIL = PAG_L - 2 * MARGEM // largura útil em twips
-const TWIP_PX = 96 / 1440 // twips → pixels a 96 dpi
-const FONTE = 'Arial'
+const MARGEM = 720
+const UTIL = PAG_L - 2 * MARGEM
+const PX_TWIP = 96 / 1440
+const ARIAL = 'Arial'
+const CALIBRI = 'Calibri'
 
-/** "#abc" ou "#aabbcc" → "AABBCC" (o Word exige 6 dígitos). */
 const hex = (cor: string) => {
   const h = cor.replace('#', '').toUpperCase()
   return h.length === 3 ? h.replace(/./g, (c) => c + c) : h
 }
-const t = (texto: string, o: { bold?: boolean; size?: number; color?: string } = {}) =>
-  new TextRun({ text: texto, font: FONTE, bold: o.bold, size: o.size ?? 20, color: o.color })
-const p = (filhos: ParagraphChild[] | string, o: { align?: (typeof AlignmentType)[keyof typeof AlignmentType]; antes?: number; depois?: number; quebra?: boolean } = {}) =>
+const t = (texto: string, o: { b?: boolean; pt?: number; cor?: string; fonte?: string } = {}) =>
+  new TextRun({ text: texto, font: o.fonte ?? ARIAL, bold: o.b, size: Math.round((o.pt ?? 11) * 2), color: o.cor })
+const p = (
+  filhos: ParagraphChild[],
+  o: { align?: (typeof AlignmentType)[keyof typeof AlignmentType]; antes?: number; depois?: number; quebra?: boolean; recuo?: number; linha?: number } = {},
+) =>
   new Paragraph({
-    children: typeof filhos === 'string' ? [t(filhos)] : filhos,
+    children: filhos,
     alignment: o.align,
-    spacing: { before: o.antes ?? 0, after: o.depois ?? 80 },
+    spacing: { before: o.antes ?? 0, after: o.depois ?? 0, line: o.linha },
     pageBreakBefore: o.quebra,
+    indent: o.recuo ? { left: o.recuo } : undefined,
+  })
+/** Título numerado das seções (14 pt, negrito, recuo da lista do modelo). */
+const titulo = (n: number, texto: string, o: { quebra?: boolean; antes?: number } = {}) =>
+  p([t(`${n}.`, { b: true, pt: 14 }), new TextRun({ text: '\t' }), t(texto, { b: true, pt: 14 })], {
+    quebra: o.quebra,
+    antes: o.antes ?? 0,
+    depois: 220,
+    recuo: 357,
   })
 
-const SEM_BORDA = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }
-const BORDA = { style: BorderStyle.SINGLE, size: 6, color: '000000' }
-const semBordas = { top: SEM_BORDA, bottom: SEM_BORDA, left: SEM_BORDA, right: SEM_BORDA, insideHorizontal: SEM_BORDA, insideVertical: SEM_BORDA }
-const comBordas = { top: BORDA, bottom: BORDA, left: BORDA, right: BORDA, insideHorizontal: BORDA, insideVertical: BORDA }
+const NADA = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }
+const semBordas = { top: NADA, bottom: NADA, left: NADA, right: NADA, insideHorizontal: NADA, insideVertical: NADA }
+const linhaFina = (cor = 'A6A6A6') => ({ style: BorderStyle.SINGLE, size: 4, color: cor })
 
-function celula(filhos: Paragraph[], o: { largura?: number; fundo?: string; colunas?: number; centro?: boolean } = {}) {
+function celula(filhos: Paragraph[], o: { l?: number; fundo?: string; span?: number; centro?: boolean; margem?: number } = {}) {
   return new TableCell({
     children: filhos,
-    width: o.largura ? { size: o.largura, type: WidthType.DXA } : undefined,
-    columnSpan: o.colunas,
+    width: o.l ? { size: o.l, type: WidthType.DXA } : undefined,
+    columnSpan: o.span,
     shading: o.fundo ? { type: ShadingType.CLEAR, color: 'auto', fill: hex(o.fundo) } : undefined,
     verticalAlign: o.centro ? VerticalAlignTable.CENTER : undefined,
-    margins: { top: 60, bottom: 60, left: 100, right: 100 },
+    margins: { top: 0, bottom: 0, left: o.margem ?? 40, right: o.margem ?? 40 },
   })
 }
 
-// ---------- imagens ----------
-const ESPACOS: Record<Slot, { l: number; a: number }> = {
-  // em pixels a 96 dpi; espelham a grade da prévia
-  tendencia: { l: Math.floor(UTIL * TWIP_PX) - 16, a: 215 },
-  espectro: { l: Math.floor(UTIL * TWIP_PX * (2 / 3)) - 16, a: 230 },
-  foto: { l: Math.floor(UTIL * TWIP_PX * (1 / 3)) - 16, a: 230 },
+// ---------- moldura de página (imagem de página inteira no cabeçalho, como o modelo faz) ----------
+async function moldura(): Promise<ArrayBuffer> {
+  const esc = 150 / 25.4 // px por mm a 150 dpi
+  const c = document.createElement('canvas')
+  c.width = Math.round(210 * esc)
+  c.height = Math.round(297 * esc)
+  const g = c.getContext('2d')!
+  g.fillStyle = '#fff'
+  g.fillRect(0, 0, c.width, c.height)
+  g.fillStyle = '#000'
+  g.fillRect(0, 0, 9.5 * esc, c.height)
+  g.fillStyle = '#FFC20E'
+  g.fillRect(0, 20.5 * esc, c.width, 0.6 * esc)
+  g.fillStyle = '#000'
+  g.textAlign = 'right'
+  g.font = `${4.2 * esc}px Arial`
+  g.fillText('PRÜFTECHNIK MGS', c.width - 12.7 * esc, 11 * esc)
+  g.font = `${2.8 * esc}px Arial`
+  g.fillStyle = '#555'
+  g.fillText('Machinery Service', c.width - 12.7 * esc, 15 * esc)
+  g.textAlign = 'center'
+  g.fillStyle = '#000'
+  g.font = `${3.2 * esc}px Arial`
+  g.fillText('www.pruftechnik.com/br', c.width / 2, c.height - 6 * esc)
+  const blob = await new Promise<Blob>((ok, falha) => c.toBlob((b) => (b ? ok(b) : falha(new Error('Falha na moldura'))), 'image/png'))
+  return blob.arrayBuffer()
 }
 
-async function imagemNoEspaco(img: ImagemRef, slot: Slot, quantas: number): Promise<ImageRun | undefined> {
-  const blob = await blobImagem(img.id)
-  if (!blob) return undefined
-  const bmp = await createImageBitmap(blob)
-  const { width: w, height: h } = bmp
-  bmp.close()
-  const caixa = { l: Math.floor(ESPACOS[slot].l / quantas) - (quantas > 1 ? 6 : 0), a: ESPACOS[slot].a }
-  let largura: number, altura: number
-  let crop: ICropOptions | undefined
-  if (img.ajuste === 'preencher') {
-    // ocupa o espaço inteiro e recorta o excesso, centralizado
-    largura = caixa.l
-    altura = caixa.a
-    const rImg = w / h
-    const rCaixa = caixa.l / caixa.a
-    if (rImg > rCaixa) {
-      const sobra = (1 - rCaixa / rImg) * 50
-      crop = { left: sobra, right: sobra, top: 0, bottom: 0 }
-    } else {
-      const sobra = (1 - rImg / rCaixa) * 50
-      crop = { top: sobra, bottom: sobra, left: 0, right: 0 }
-    }
-  } else {
-    // imagem inteira, sem distorcer
-    const escala = Math.min(caixa.l / w, caixa.a / h)
-    largura = Math.round(w * escala)
-    altura = Math.round(h * escala)
-  }
-  return new ImageRun({
-    type: 'jpg',
-    data: await blob.arrayBuffer(),
-    transformation: { width: largura, height: altura },
-    crop,
-    altText: { name: img.nome, description: img.nome, title: img.nome },
-  })
-}
-
-async function espaco(imagens: ImagemRef[], slot: Slot): Promise<Paragraph> {
-  const dela = imagens.filter((i) => i.slot === slot)
-  const runs = (await Promise.all(dela.map((i) => imagemNoEspaco(i, slot, dela.length)))).filter(Boolean) as ImageRun[]
-  return new Paragraph({ children: runs, alignment: AlignmentType.CENTER, spacing: { after: 0 } })
-}
-
-/** Imagem em data URL → bytes e tamanho (px) cabendo em l × a, sem distorcer. */
-async function imagemDeDataUrl(url: string, l: number, a: number) {
-  const blob = await (await fetch(url)).blob()
-  const bmp = await createImageBitmap(blob)
-  const esc = Math.min(l / bmp.width, a / bmp.height, 1)
-  const r = { largura: Math.round(bmp.width * esc), altura: Math.round(bmp.height * esc) }
-  bmp.close()
-  return { dados: await blob.arrayBuffer(), tipo: (blob.type.includes('png') ? 'png' : 'jpg') as 'png' | 'jpg', ...r }
-}
-
-// ---------- documento ----------
-function cabecalho(r: Relatorio) {
-  const contato: Paragraph[] = []
-  if (r.contato?.telefone) contato.push(p([t(`Telefone: ${r.contato.telefone}`, { size: 14 })], { depois: 0 }))
-  if (r.contato?.email) contato.push(p([t('Email – ', { size: 14 }), t(r.contato.email, { size: 14, color: '0563C1' })], { depois: 0 }))
-  return new Header({
+async function cabecalho(r: Relatorio) {
+  const linhas = ['José P. Xavier Sobrinho, 101 - B. Triângulo', 'Pedro Leopoldo – MG – Brasil - CEP:33600-000']
+  if (r.contato?.telefone) linhas.push(`Telefone: ${r.contato.telefone}`)
+  const pars = linhas.map((l) => p([t(l, { pt: 8, fonte: CALIBRI })]))
+  if (r.contato?.email) pars.push(p([t('Email – ', { pt: 8, fonte: CALIBRI }), t(r.contato.email, { pt: 8, fonte: CALIBRI, cor: '0563C1' })]))
+  pars[0] = new Paragraph({
     children: [
-      new Table({
-        width: { size: UTIL, type: WidthType.DXA },
-        columnWidths: [UTIL / 2, UTIL / 2],
-        borders: { ...semBordas, bottom: { style: BorderStyle.SINGLE, size: 12, color: 'F5B800' } },
-        rows: [
-          new TableRow({
+      new ImageRun({
+        type: 'png',
+        data: await moldura(),
+        transformation: { width: Math.round((PAG_L * PX_TWIP) as number), height: Math.round(PAG_A * PX_TWIP) },
+        floating: {
+          horizontalPosition: { relative: HorizontalPositionRelativeFrom.PAGE, offset: 0 },
+          verticalPosition: { relative: VerticalPositionRelativeFrom.PAGE, offset: 0 },
+          wrap: { type: TextWrappingType.NONE },
+          behindDocument: true,
+          allowOverlap: true,
+        },
+        altText: { name: 'Moldura', description: 'Moldura da página', title: 'Moldura' },
+      }),
+      t(linhas[0], { pt: 8, fonte: CALIBRI }),
+    ],
+  })
+  return new Header({ children: pars })
+}
+
+const rodape = (r: Relatorio) =>
+  new Footer({ children: r.art?.trim() ? [new Paragraph({ children: [t(`ART: ${r.art.trim()}`, { b: true, pt: 14, fonte: CALIBRI })], indent: { firstLine: 708 } })] : [] })
+
+// ---------- 1. condição ----------
+function legenda(): Table {
+  const esq = ['1', '2', '3', '4', '5', '6', '7']
+  const dir = ['8', '9', '10', '11', '12', '13', 'X']
+  const lNum = Math.round(UTIL * 0.1)
+  const lNome = Math.round(UTIL / 2 - lNum)
+  const par = (c: string) => {
+    const k = CONDICOES[c]
+    return [
+      celula([p([t(c, { b: true, pt: 7, cor: hex(k.texto) })], { align: AlignmentType.CENTER })], { l: lNum, fundo: k.cor }),
+      celula([p([t(k.nome.toUpperCase(), { pt: 7 })])], { l: lNome }),
+    ]
+  }
+  const preta = { style: BorderStyle.SINGLE, size: 4, color: '000000' }
+  return new Table({
+    width: { size: lNum * 2 + lNome * 2, type: WidthType.DXA },
+    columnWidths: [lNum, lNome, lNum, lNome],
+    layout: TableLayoutType.FIXED,
+    borders: { top: { ...preta, size: 12 }, bottom: { ...preta, size: 12 }, left: { ...preta, size: 12 }, right: { ...preta, size: 12 }, insideHorizontal: preta, insideVertical: preta },
+    rows: [
+      new TableRow({ children: [celula([p([t('PRÜFTECHNIK ', { pt: 7 }), t('MGS', { b: true, pt: 7 })])], { span: 4 })] }),
+      ...esq.map((c, i) => new TableRow({ cantSplit: true, children: [...par(c), ...par(dir[i])] })),
+    ],
+  })
+}
+
+function quadro(r: Relatorio): (Paragraph | Table)[] {
+  const eqs = equipamentosQuadro(r)
+  if (!eqs.length) return [p([t('Nenhum equipamento com as condições selecionadas.', { pt: 10, cor: '777777' })], { antes: 200 })]
+  const meses = colunasQuadro(r)
+  const lMes = 900
+  const lPlano = 1150
+  const resto = UTIL - lPlano - lMes * meses.length
+  const lDesc = Math.round(resto * 0.54)
+  const larg = [lPlano, lDesc, resto - lDesc, ...meses.map(() => lMes)]
+  const txt = (s: string, o: { b?: boolean; cor?: string } = {}) => p([t(s, { pt: 7, fonte: CALIBRI, ...o })], { align: AlignmentType.CENTER })
+  return [
+    p([], { depois: 240 }),
+    new Table({
+      width: { size: UTIL, type: WidthType.DXA },
+      columnWidths: larg,
+      layout: TableLayoutType.FIXED,
+      borders: { top: linhaFina(), bottom: linhaFina(), left: linhaFina(), right: linhaFina(), insideHorizontal: linhaFina(), insideVertical: linhaFina() },
+      rows: [
+        new TableRow({ tableHeader: true, children: [celula([txt(r.areaTitulo || r.sigla, { b: true })], { span: larg.length })] }),
+        new TableRow({
+          tableHeader: true,
+          children: ['Plano manutenção', 'Descrição', 'Local de instalação', ...meses.map(mesCurto)].map((h, i) => celula([txt(h, { b: true })], { l: larg[i], centro: true })),
+        }),
+        ...eqs.map(
+          (e) =>
+            new TableRow({
+              cantSplit: true,
+              children: [
+                celula([txt(e.plano ?? '')], { l: larg[0] }),
+                celula([txt(e.descricao)], { l: larg[1] }),
+                celula([txt(e.local)], { l: larg[2] }),
+                ...meses.map((m, i) => {
+                  const c = condicaoNoMes(r, e, m)
+                  const k = CONDICOES[c]
+                  return celula([txt(c, { b: true, cor: k ? hex(k.texto) : undefined })], { l: larg[3 + i], fundo: k?.cor })
+                }),
+              ],
+            }),
+        ),
+      ],
+    }),
+  ]
+}
+
+// ---------- página de anomalia ----------
+const SEV_COR: Record<string, string> = { Alarme: 'FF0000', Alerta: 'FFC000', 'Pré-alerta': 'FFFF00' }
+const NIVEIS = ['Alarme', 'Alerta', 'Pré-alerta'] as const
+const GROSSA = { style: BorderStyle.SINGLE, size: 18, color: '000000' }
+
+function caixa(rotulo: string, linhas: [string, string][], comNome: boolean) {
+  const borda = { style: BorderStyle.SINGLE, size: 8, color: '000000' }
+  return new Table({
+    width: { size: UTIL, type: WidthType.DXA },
+    columnWidths: [UTIL],
+    borders: { top: borda, bottom: borda, left: borda, right: borda, insideHorizontal: NADA, insideVertical: NADA },
+    rows: [
+      new TableRow({
+        cantSplit: true,
+        height: { value: 900, rule: 'atLeast' },
+        children: [
+          new TableCell({
+            margins: { top: 72, bottom: 72, left: 144, right: 144 },
             children: [
-              celula([
-                p([t('José P. Xavier Sobrinho, 101 - B. Triângulo', { size: 14 })], { depois: 0 }),
-                p([t('Pedro Leopoldo – MG – Brasil - CEP:33600-000', { size: 14 })], { depois: 0 }),
-                ...contato,
-              ]),
-              celula([p([t('PRÜFTECHNIK · MGS', { bold: true, size: 22 })], { align: AlignmentType.RIGHT })], { centro: true }),
+              p([t(rotulo, { pt: 10 })], { depois: 100 }),
+              ...linhas.map(([nome, texto]) => p([...(comNome ? [t(`${nome}: `, { b: true, pt: 10 })] : []), t(texto, { pt: 10 })], { align: AlignmentType.JUSTIFIED })),
             ],
           }),
         ],
@@ -174,328 +252,227 @@ function cabecalho(r: Relatorio) {
   })
 }
 
-function rodape(r: Relatorio) {
-  return new Footer({
-    children: [
-      ...(r.art ? [p([t(`ART: ${r.art}`, { bold: true, size: 20 })], { depois: 0 })] : []),
-      p([t(`${r.codigo}   ·   página `, { size: 14, color: '777777' }), new TextRun({ children: [PageNumber.CURRENT], font: FONTE, size: 14, color: '777777' })], {
-        align: AlignmentType.RIGHT,
+async function imagens(r: Relatorio, local: string): Promise<Paragraph> {
+  const e = r.equipamentos.find((x) => x.local === local)!
+  const a = anomaliaDe(r, e)
+  const W = UTIL * PX_TWIP // px a 96 dpi
+  const H = (W * AREA_IMAGENS_MM.a) / AREA_IMAGENS_MM.l
+  const EMU = 9525
+  const runs: ImageRun[] = []
+  for (const [ordem, img] of a.imagens.entries()) {
+    const blob = await blobImagem(img.id)
+    if (!blob) continue
+    const pos = posicaoLivre(img, a.imagens)
+    const bmp = await createImageBitmap(blob)
+    const { width: wi, height: hi } = bmp
+    bmp.close()
+    const cx = { l: (pos.l / 100) * W, a: (pos.a / 100) * H }
+    const preenche = img.ajuste === 'preencher'
+    const esc = preenche ? Math.max(cx.l / wi, cx.a / hi) : Math.min(cx.l / wi, cx.a / hi)
+    const l = preenche ? cx.l : wi * esc
+    const h = preenche ? cx.a : hi * esc
+    let crop: ICropOptions | undefined
+    if (preenche) {
+      const sx = Math.max(0, (1 - cx.l / (wi * esc)) * 50)
+      const sy = Math.max(0, (1 - cx.a / (hi * esc)) * 50)
+      crop = { left: sx, right: sx, top: sy, bottom: sy }
+    }
+    runs.push(
+      new ImageRun({
+        type: 'jpg',
+        data: await blob.arrayBuffer(),
+        transformation: { width: Math.round(l), height: Math.round(h) },
+        crop,
+        altText: { name: img.nome, description: img.nome, title: img.nome },
+        floating: {
+          horizontalPosition: { relative: HorizontalPositionRelativeFrom.MARGIN, offset: Math.round(((pos.x / 100) * W + (cx.l - l) / 2) * EMU) },
+          verticalPosition: { relative: VerticalPositionRelativeFrom.PARAGRAPH, offset: Math.round((5.7 + (pos.y / 100) * H + (cx.a - h) / 2) * EMU) },
+          wrap: { type: TextWrappingType.NONE },
+          allowOverlap: true,
+          lockAnchor: true,
+          behindDocument: false,
+          zIndex: 251659264 + ordem * 1024,
+        },
       }),
-    ],
-  })
-}
-
-/** Tabela "CONDIÇÃO DO EQUIPAMENTO" (número × condição), igual à dos relatórios emitidos. */
-function legendaCondicoes(): Table {
-  const esq = ['1', '2', '3', '4', '5', '6', '7']
-  const dir = ['8', '9', '10', '11', '12', '13', 'X']
-  const lNum = 560
-  const lNome = Math.round((UTIL - 2 * lNum) / 2)
-  const par = (c: string) => {
-    const k = CONDICOES[c]
-    return [
-      celula([p([t(c, { bold: true, size: 15, color: hex(k.texto) })], { align: AlignmentType.CENTER, depois: 0 })], { largura: lNum, fundo: k.cor }),
-      celula([p([t(k.nome.toUpperCase(), { size: 15 })], { depois: 0 })], { largura: lNome }),
-    ]
+    )
   }
-  return new Table({
-    width: { size: UTIL, type: WidthType.DXA },
-    columnWidths: [lNum, lNome, lNum, lNome],
-    borders: comBordas,
-    rows: [
-      new TableRow({
-        children: [celula([p([t('CONDIÇÃO DO EQUIPAMENTO', { bold: true, size: 18 })], { align: AlignmentType.CENTER, depois: 0 })], { colunas: 4, largura: UTIL })],
-      }),
-      ...esq.map((c, i) => new TableRow({ cantSplit: true, children: [...par(c), ...par(dir[i])] })),
-    ],
-  })
-}
-
-function quadro(r: Relatorio): (Paragraph | Table)[] {
-  const eqs = equipamentosQuadro(r)
-  if (!eqs.length) return [p([t('Nenhum equipamento com as condições selecionadas.', { color: '777777' })])]
-  const meses = colunasQuadro(r)
-  const lMes = 760
-  const lLocal = Math.round((UTIL - lMes * meses.length) * 0.42)
-  const larg = [lLocal, UTIL - lMes * meses.length - lLocal, ...meses.map(() => lMes)]
-  const cab = ['Local de instalação', 'Descrição', ...meses.map(mesCurto)].map((h, i) =>
-    celula([p([t(h, { bold: true, size: 16, color: 'FFFFFF' })], { align: AlignmentType.CENTER, depois: 0 })], { largura: larg[i], fundo: '#002060' }),
-  )
-  const linhas = eqs.map(
-    (e) =>
-      new TableRow({
-        children: [
-          celula([p([t(e.local, { size: 16 })], { depois: 0 })], { largura: larg[0] }),
-          celula([p([t(e.descricao, { size: 16 })], { depois: 0 })], { largura: larg[1] }),
-          ...meses.map((m, i) => {
-            const c = condicaoNoMes(r, e, m)
-            const k = CONDICOES[c] ?? CONDICOES.X
-            return celula([p([t(c, { size: 16, color: hex(k.texto) })], { align: AlignmentType.CENTER, depois: 0 })], {
-              largura: larg[2 + i],
-              fundo: k.cor,
-            })
-          }),
-        ],
-      }),
-  )
-  return [
-    new Table({
-      width: { size: UTIL, type: WidthType.DXA },
-      columnWidths: larg,
-      borders: comBordas,
-      rows: [new TableRow({ children: cab, tableHeader: true }), ...linhas],
-    }),
-  ]
+  return new Paragraph({ children: runs, spacing: { before: 0, after: 0 } })
 }
 
 async function paginaAnomalia(r: Relatorio, local: string): Promise<(Paragraph | Table)[]> {
   const e = r.equipamentos.find((x) => x.local === local)!
   const a = anomaliaDe(r, e)
   const sev = severidade(e.condicao)
-  const corSev = (s: string) => (s === 'Alarme' ? '#ff0000' : s === 'Alerta' ? '#ffc000' : '#ffff00')
-
-  const titulo = new Table({
+  const rot = rotulosUsina(r.usina)
+  const lSev = 2090
+  const campo = (k: string, v: string) => p([t(`${k}:`, { b: true }), t(` ${v}`)], { depois: 150, linha: 230 })
+  const topo = new Table({
     width: { size: UTIL, type: WidthType.DXA },
-    columnWidths: [Math.round(UTIL * 0.7), UTIL - Math.round(UTIL * 0.7)],
-    borders: { ...semBordas, bottom: { style: BorderStyle.SINGLE, size: 12, color: '000000' } },
+    columnWidths: [UTIL - lSev, lSev],
+    borders: semBordas,
     rows: [
       new TableRow({
-        cantSplit: true,
         children: [
-          celula([p([t('Relatório de Análise de Vibração', { bold: true, size: 30, color: 'E00000' })], { depois: 0 })]),
-          celula([p([t('Anomalia pendente', { bold: true, size: 18 })], { align: AlignmentType.RIGHT, depois: 0 })], { centro: true }),
+          celula(
+            [
+              campo('Localização', a.localizacao || localizacaoPadrao(r, e)),
+              campo('Equipamento', a.equipamento || e.descricao),
+              campo(rot.data, a.dataMedicao || VAZIO),
+              campo('Reincidente desde', reincidenciaFinal(r, e, a) || VAZIO),
+              campo('Nota PR', a.notasPR || VAZIO),
+            ],
+            { l: UTIL - lSev, margem: 0 },
+          ),
+          new TableCell({
+            width: { size: lSev, type: WidthType.DXA },
+            borders: { top: NADA, bottom: NADA, left: NADA, right: NADA },
+            children: [
+              new Table({
+                width: { size: lSev, type: WidthType.DXA },
+                columnWidths: [407, lSev - 407],
+                borders: semBordas,
+                rows: rot.severidades.map(
+                  (s, i) =>
+                    new TableRow({
+                      height: { value: 400, rule: 'atLeast' },
+                      children: [
+                        new TableCell({
+                          width: { size: 407, type: WidthType.DXA },
+                          borders: { top: GROSSA, bottom: GROSSA, left: GROSSA, right: GROSSA },
+                          shading: { type: ShadingType.CLEAR, color: 'auto', fill: sev === NIVEIS[i] ? SEV_COR[NIVEIS[i]] : 'FFFFFF' },
+                          children: [p([])],
+                        }),
+                        celula([p([t(s, { b: true, pt: 9 })])], { l: lSev - 407, centro: true, margem: 110 }),
+                      ],
+                    }),
+                ),
+              }),
+            ],
+          }),
         ],
       }),
     ],
   })
-
-  const rot = rotulosUsina(r.usina)
-  const info = [
-    ['Localização', a.localizacao || localizacaoPadrao(r, e)],
-    ['Equipamento', a.equipamento || e.descricao],
-    [rot.data, a.dataMedicao || VAZIO],
-    ['Reincidente desde', reincidenciaFinal(r, e, a) || VAZIO],
-    ['Nota PR', a.notasPR || VAZIO],
-  ].map(([k, v]) => p([t(`${k}: ${v}`, { bold: true, size: 20 })], { depois: 30 }))
-
-  const severidades = new Table({
-    width: { size: 1700, type: WidthType.DXA },
-    columnWidths: [400, 1300],
-    borders: semBordas,
-    rows: (['Alarme', 'Alerta', 'Pré-alerta'] as const).map(
-      (s, i) =>
-        new TableRow({
-          children: [
-            new TableCell({
-              children: [p('', { depois: 0 })],
-              width: { size: 400, type: WidthType.DXA },
-              shading: { type: ShadingType.CLEAR, color: 'auto', fill: sev === s ? hex(corSev(s)) : 'FFFFFF' },
-              borders: { top: BORDA, bottom: BORDA, left: BORDA, right: BORDA },
-            }),
-            celula([p([t(rot.severidades[i], { bold: true, size: 18 })], { depois: 0 })], { centro: true }),
-          ],
-        }),
-    ),
-  })
-
-  const cabecalhoAnomalia = new Table({
-    width: { size: UTIL, type: WidthType.DXA },
-    columnWidths: [UTIL - 1900, 1900],
-    borders: semBordas,
-    rows: [new TableRow({ children: [celula(info), new TableCell({ children: [severidades], width: { size: 1900, type: WidthType.DXA } })] })],
-  })
-
-  const caixa = (rotulo: string, linhas: [string, string][]) =>
-    new Table({
-      width: { size: UTIL, type: WidthType.DXA },
-      columnWidths: [UTIL],
-      borders: comBordas,
-      rows: [
-        new TableRow({
-          height: { value: 1700, rule: 'atLeast' },
-          children: [
-            celula([
-              p([t(rotulo, { bold: true, size: 20 })], { depois: 100 }),
-              ...linhas.map(([nome, texto]) => p([t(`${nome}: `, { bold: true }), t(texto)], { align: AlignmentType.JUSTIFIED, depois: 80 })),
-            ]),
-          ],
-        }),
-      ],
-    })
-
-  const temImg = (s: Slot) => a.imagens.some((i) => i.slot === s)
-  const blocos: (Paragraph | Table)[] = [
-    titulo,
-    p('', { depois: 60 }),
-    cabecalhoAnomalia,
-    p('', { depois: 60 }),
-    caixa('Situação:', a.eixos.map((x) => [x.nome, juntar(x.situacaoPadrao, x.situacaoTecnico)])),
-    p('', { depois: 60 }),
-    caixa('Recomendação:', a.eixos.map((x) => [x.nome, juntar(x.recomendacaoPadrao, x.recomendacaoTecnico)])),
+  const situacao = a.eixos.map((x) => [x.nome, juntar(x.situacaoPadrao, x.situacaoTecnico)] as [string, string]).filter(([, s]) => s)
+  const recomendacao = a.eixos.map((x) => [x.nome, juntar(x.recomendacaoPadrao, x.recomendacaoTecnico)] as [string, string]).filter(([, s]) => s)
+  const linhaGrossa = { bottom: { style: BorderStyle.SINGLE, size: 18, color: '000000', space: 2 } }
+  return [
+    new Paragraph({
+      children: [t('PRÜFTECHNIK ', { pt: 9 }), t('MGS', { b: true, pt: 9 }), new TextRun({ text: '\t' }), t('vallourec', { b: true, pt: 13, cor: '1F3C88' })],
+      tabStops: [{ type: 'right', position: UTIL }],
+      border: linhaGrossa,
+      spacing: { before: 120, after: 80 },
+    }),
+    new Paragraph({
+      children: [t('Relatório de Análise de Vibração', { b: true, pt: 16, cor: 'FF0000' }), new TextRun({ text: '\t' }), t('Anomalia pendente', { b: true, pt: 9 })],
+      tabStops: [{ type: 'right', position: UTIL }],
+      border: linhaGrossa,
+      spacing: { before: 0, after: 160 },
+    }),
+    topo,
+    p([], { depois: 60 }),
+    caixa('Situação:', situacao, true),
+    p([], { depois: 60 }),
+    caixa('Recomendação:', recomendacao, recomendacao.length > 1),
+    await imagens(r, local),
   ]
-
-  if (a.imagens.length && a.layoutImagens === 'livre') {
-    // Layout livre: imagens flutuantes na mesma posição da prévia (área proporcional à largura útil)
-    const W = Math.floor(UTIL * TWIP_PX)
-    const H = Math.round((W * AREA_IMAGENS_MM.a) / AREA_IMAGENS_MM.l)
-    const EMU = 9525 // por pixel
-    const runs: ImageRun[] = []
-    for (const [ordem, img] of a.imagens.entries()) {
-      const pos = posicaoLivre(img, a.imagens)
-      const blob = await blobImagem(img.id)
-      if (!blob) continue
-      const bmp = await createImageBitmap(blob)
-      const { width: w, height: h } = bmp
-      bmp.close()
-      const caixa = { l: (pos.l / 100) * W, a: (pos.a / 100) * H }
-      const esc = img.ajuste === 'preencher' ? Math.max(caixa.l / w, caixa.a / h) : Math.min(caixa.l / w, caixa.a / h)
-      const largura = img.ajuste === 'preencher' ? caixa.l : w * esc
-      const altura = img.ajuste === 'preencher' ? caixa.a : h * esc
-      let crop: ICropOptions | undefined
-      if (img.ajuste === 'preencher') {
-        const sobraX = Math.max(0, (1 - caixa.l / (w * esc)) * 50)
-        const sobraY = Math.max(0, (1 - caixa.a / (h * esc)) * 50)
-        crop = { left: sobraX, right: sobraX, top: sobraY, bottom: sobraY }
-      }
-      const x = (pos.x / 100) * W + (caixa.l - largura) / 2
-      const y = (pos.y / 100) * H + (caixa.a - altura) / 2
-      runs.push(
-        new ImageRun({
-          type: 'jpg',
-          data: await blob.arrayBuffer(),
-          transformation: { width: Math.round(largura), height: Math.round(altura) },
-          crop,
-          altText: { name: img.nome, description: img.nome, title: img.nome },
-          floating: {
-            horizontalPosition: { relative: HorizontalPositionRelativeFrom.MARGIN, offset: Math.round(x * EMU) },
-            verticalPosition: { relative: VerticalPositionRelativeFrom.PARAGRAPH, offset: Math.round(y * EMU) },
-            wrap: { type: TextWrappingType.NONE },
-            allowOverlap: true,
-            lockAnchor: true,
-            behindDocument: false,
-            zIndex: 251658240 + ordem * 1024, // escala que o Word usa; a última imagem fica por cima, como na prévia
-          },
-        }),
-      )
-    }
-    // parágrafo-âncora com a altura da área, para o que vier depois não ficar por baixo das imagens
-    blocos.push(new Paragraph({ children: runs, spacing: { before: 120, after: Math.round(H / TWIP_PX) } }))
-  } else if (a.imagens.length) {
-    const c1 = Math.round(UTIL * (2 / 3))
-    const linhas: TableRow[] = []
-    if (temImg('tendencia'))
-      linhas.push(new TableRow({ cantSplit: true, children: [celula([await espaco(a.imagens, 'tendencia')], { colunas: 2, largura: UTIL })] }))
-    if (temImg('espectro') || temImg('foto'))
-      linhas.push(
-        new TableRow({
-          cantSplit: true,
-          children: [
-            celula([await espaco(a.imagens, 'espectro')], { largura: c1, centro: true }),
-            celula([await espaco(a.imagens, 'foto')], { largura: UTIL - c1, centro: true }),
-          ],
-        }),
-      )
-    blocos.push(
-      p('', { depois: 60 }),
-      new Table({ width: { size: UTIL, type: WidthType.DXA }, columnWidths: [c1, UTIL - c1], borders: comBordas, rows: linhas }),
-    )
-  }
-  return blocos
 }
 
+// ---------- documento ----------
 export async function gerarWord(r: Relatorio): Promise<Blob> {
-  const capa = [
-    p('', { antes: 2400 }),
-    p([t('Relatório de Análise de Vibração', { bold: true, size: 52 })], { align: AlignmentType.CENTER, depois: 1600 }),
-    p([t('Número do Relatório: '), t(r.codigo, { bold: true }), t(r.areaTitulo ? ` – ${r.areaTitulo}` : '')], {
-      align: AlignmentType.CENTER,
-      depois: 3600,
-    }),
-    p([t(`${r.cidade ? `${r.cidade}, ` : ''}${dataPorExtenso(r.dataExpedicao)}`)], { align: AlignmentType.CENTER }),
-  ]
-
-  const condicao: (Paragraph | Table)[] = [
-    p([t('1. Condição dos equipamentos da rota', { bold: true, size: 24 })], { quebra: true, depois: 160 }),
-    legendaCondicoes(),
-    p('', { depois: 120 }),
-    ...quadro(r),
-  ]
-
-  // 4.1 Equipamentos utilizados, 4.2 Equipe técnica (com selos), 5. Anomalias registradas
   const anomalias = equipamentosAnomalia(r)
-  const equipe: (Paragraph | Table)[] = [
-    p([t('4.1 Equipamentos utilizados', { bold: true, size: 24 })], { quebra: true, depois: 120 }),
-    p(`Aparelho: ${r.aparelho || VAZIO}`, { depois: 40 }),
-    p(`Software: ${r.software || VAZIO}`),
-    p([t('4.2 Equipe Técnica', { bold: true, size: 24 })], { antes: 360, depois: 120 }),
-    p(`Técnico responsável pela coleta de dados: ${r.equipe.coleta || VAZIO}`, { depois: 40 }),
-    p(`Técnico responsável pela análise de dados: ${r.equipe.analise || VAZIO}`),
+  const comInd = r.incluirIndicadores !== false
+  const nDados = comInd ? 4 : 2
+  const ponto = (s: string) => (s && !/[.!?]$/.test(s) ? `${s}.` : s)
+
+  const rosto = [
+    p([t('Relatório de Análise de Vibração', { b: true, pt: 28 })], { align: AlignmentType.CENTER, linha: 400, antes: 0 }),
+    p([t(`Número do Relatório: ${r.codigo}${r.areaTitulo ? ` - ${r.areaTitulo}` : ''}`, { b: true, pt: 14 })], { antes: 5600, recuo: 700 }),
+    p([t(`${r.cidade ? `${r.cidade}, ` : ''}${dataPorExtenso(r.dataExpedicao).replace(/^0/, '')}`, { pt: 14 })], { align: AlignmentType.CENTER, antes: 3700 }),
+  ]
+
+  const condicao: (Paragraph | Table)[] = [titulo(1, 'Condição dos equipamentos da rota', { quebra: true }), legenda(), ...quadro(r)]
+
+  const indicadores: (Paragraph | Table)[] = []
+  if (comInd) {
+    const g = graficosDoMes(calcularIndicadores(r), r.mesReferencia)
+    const l = Math.round(UTIL * PX_TWIP)
+    const h = Math.round((l * ALTURA_MODELO) / LARGURA_MODELO)
+    const fig = async (svg: string, nome: string) =>
+      new Paragraph({
+        children: [new ImageRun({ type: 'png', data: await svgParaPng(svg, 2, LARGURA_MODELO, ALTURA_MODELO), transformation: { width: l, height: h }, altText: { name: nome, description: nome, title: nome } })],
+        spacing: { after: 100 },
+      })
+    indicadores.push(
+      titulo(2, 'Índice de execução', { quebra: true }),
+      await fig(g.execucao, 'Índice de execução'),
+      titulo(3, 'Indicadores de anomalia', { antes: 300 }),
+      await fig(g.anomalias, 'Indicador de anomalias'),
+      await fig(g.reincidencia, 'Índice de reincidências'),
+    )
+  }
+
+  const linha14 = (s: string) => p([t(s, { pt: 14 })], { linha: 300 })
+  const sub = (s: string, antes: number) => p([t(s, { b: true, pt: 14 })], { antes, depois: 40 })
+  const dados: (Paragraph | Table)[] = [
+    p([t(`${nDados}.`, { b: true, pt: 14 }), new TextRun({ text: '\t' }), t('Dados operacionais', { b: true, pt: 14 })], { quebra: true, depois: 240 }),
+    sub(`${nDados}.1 Equipamentos utilizados`, 0),
+    ...(r.aparelho !== '' ? [linha14(`Aparelho: ${ponto(r.aparelho || VAZIO)}`)] : []),
+    ...(r.software !== '' ? [linha14(`Software para tratamento dos dados medidos: ${ponto(r.software || VAZIO)}`)] : []),
+    ...(r.plataforma ? [linha14(ponto(`Plataforma Web Dynamox: ${r.plataforma}`))] : []),
+    sub(`${nDados}.2 Equipe Técnica`, 900),
+    linha14(`Técnico responsável pela coleta de dados: ${ponto(r.equipe.coleta || VAZIO)}`),
+    linha14(`Técnico responsável pela análise de dados: ${ponto(r.equipe.analise || VAZIO)}`),
   ]
   const selos = [...new Set([r.equipe.seloColeta, r.equipe.seloAnalise].filter(Boolean) as string[])]
   if (selos.length) {
     const runs: (ImageRun | TextRun)[] = []
     for (const [i, s] of selos.entries()) {
-      const { dados, tipo, largura, altura } = await imagemDeDataUrl(s, 260, 115)
-      if (i) runs.push(new TextRun({ text: '      ', font: FONTE }))
-      runs.push(new ImageRun({ type: tipo, data: dados, transformation: { width: largura, height: altura }, altText: { name: 'Selo', description: 'Selo de certificação', title: 'Selo' } }))
+      const blob = await (await fetch(s)).blob()
+      const bmp = await createImageBitmap(blob)
+      const alt = 68
+      const larg = Math.round((bmp.width / bmp.height) * alt)
+      bmp.close()
+      if (i) runs.push(new TextRun({ text: '      ' }))
+      runs.push(new ImageRun({ type: blob.type.includes('png') ? 'png' : 'jpg', data: await blob.arrayBuffer(), transformation: { width: larg, height: alt }, altText: { name: 'Selo', description: 'Selo de certificação', title: 'Selo' } }))
     }
-    equipe.push(new Paragraph({ children: runs, spacing: { before: 240 } }))
+    dados.push(new Paragraph({ children: runs, spacing: { before: 200 } }))
   }
-  if (anomalias.length)
-    equipe.push(
-      p([t('5. Anomalias registradas', { bold: true, size: 24 })], { antes: 480, depois: 100 }),
-      p('A seguir as anomalias detectadas nos equipamentos monitorados.'),
-    )
+  if (anomalias.length) dados.push(sub(`${nDados + 1}. Anomalias registradas`, selos.length ? 200 : 340), linha14('A seguir as anomalias detectadas nos equipamentos monitorados.'))
 
-  // Indicadores: os mesmos gráficos SVG da prévia, convertidos em PNG
-  const indicadores: (Paragraph | Table)[] = []
-  if (r.incluirIndicadores !== false) {
-    const g = graficosDoRelatorio(calcularIndicadores(r), r.usina)
-    const largura = Math.floor(UTIL * TWIP_PX)
-    const altura = Math.round((largura * ALTURA_GRAFICO) / LARGURA_GRAFICO)
-    const blocos: [string, string][] = [
-      ['2. Índice de execução', g.execucao],
-      ['3. Indicadores de anomalias', g.anomalias],
-      ['4. Dados operacionais', g.reincidencia],
-    ]
-    for (const [k, [titulo, svg]] of blocos.entries()) {
-      indicadores.push(
-        p([t(titulo, { bold: true, size: 24 })], { quebra: k === 0, antes: k === 0 ? 0 : 240, depois: 120 }),
-        new Paragraph({
-          children: [new ImageRun({ type: 'png', data: await svgParaPng(svg), transformation: { width: largura, height: altura }, altText: { name: titulo, description: titulo, title: titulo } })],
-          spacing: { after: 0 },
-        }),
-      )
-    }
+  const pagina = {
+    size: { width: PAG_L, height: PAG_A },
+    margin: { top: MARGEM, bottom: MARGEM, left: MARGEM, right: MARGEM, header: 283, footer: 708 },
   }
+  const cab = await cabecalho(r)
+  const vazioCab = new Header({ children: [] })
+  const vazioRod = new Footer({ children: [] })
 
-  const paginas: (Paragraph | Table)[] = []
-  for (const e of anomalias) {
-    paginas.push(p('', { quebra: true, depois: 0 }), ...(await paginaAnomalia(r, e.local)))
-  }
+  const secoes = [
+    // corpo com a moldura (o cabeçalho empurra o texto como no modelo)
+    {
+      properties: { page: { ...pagina, margin: { ...pagina.margin, top: 1900, bottom: 1500 } } },
+      headers: { default: cab },
+      footers: { default: rodape(r) },
+      children: [...rosto, ...condicao, ...indicadores, ...dados],
+    },
+    // páginas de anomalia: sem cabeçalho nem rodapé, uma seção por equipamento
+    ...(await Promise.all(
+      anomalias.map(async (e) => ({
+        properties: { page: pagina },
+        headers: { default: vazioCab },
+        footers: { default: vazioRod },
+        children: await paginaAnomalia(r, e.local),
+      })),
+    )),
+  ]
 
   const doc = new Document({
     creator: r.atualizadoPor || 'VibDocs',
     title: `${r.codigo}${r.areaTitulo ? ` - ${r.areaTitulo}` : ''}`,
     description: 'Relatório de Análise de Vibração',
-    styles: { default: { document: { run: { font: FONTE, size: 20 } } } },
-    sections: [
-      {
-        properties: {
-          page: {
-            size: { width: PAG_L, height: PAG_A },
-            margin: { top: MARGEM, bottom: MARGEM, left: MARGEM, right: MARGEM, header: 500, footer: 400 },
-            borders: {
-              pageBorderLeft: { style: BorderStyle.SINGLE, size: 96, color: '000000', space: 24 },
-              pageBorders: { offsetFrom: 'page' },
-            },
-          },
-        },
-        headers: { default: cabecalho(r) },
-        footers: { default: rodape(r) },
-        children: [...capa, ...condicao, ...indicadores, ...equipe, ...paginas],
-      },
-    ],
+    styles: { default: { document: { run: { font: ARIAL, size: 22 }, paragraph: { spacing: { after: 0 } } } } },
+    sections: secoes,
   })
   return Packer.toBlob(doc)
 }

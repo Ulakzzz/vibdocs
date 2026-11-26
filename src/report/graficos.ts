@@ -104,15 +104,15 @@ export function svgGrafico(g: Grafico): string {
 }
 
 /** Converte o SVG em PNG (no navegador), com resolução extra para impressão. */
-export async function svgParaPng(svg: string, escala = 2): Promise<ArrayBuffer> {
+export async function svgParaPng(svg: string, escala = 2, l = LARGURA, a = ALTURA): Promise<ArrayBuffer> {
   const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))
   try {
     const img = new Image()
     img.src = url
     await img.decode()
     const c = document.createElement('canvas')
-    c.width = LARGURA * escala
-    c.height = ALTURA * escala
+    c.width = l * escala
+    c.height = a * escala
     const g = c.getContext('2d')!
     g.fillStyle = '#fff'
     g.fillRect(0, 0, c.width, c.height)

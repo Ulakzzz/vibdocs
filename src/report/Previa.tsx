@@ -2,7 +2,7 @@
 // Segue a geometria do modelo .docx (DWS): capa, moldura de página inteira, rosto, seções numeradas
 // e páginas de anomalia. Com o modelo carregado, usa as imagens dele (capa, moldura, legenda, logos);
 // sem modelo, desenha uma moldura simples no mesmo lugar.
-import { useLayoutEffect, useRef, useState } from 'react'
+import { memo, useLayoutEffect, useRef } from 'react'
 import { CONDICOES, severidade } from '../lib/condicao'
 import { mesCurto } from '../lib/historico'
 import { calcularIndicadores } from '../lib/indicadores'
@@ -258,7 +258,7 @@ function PaginaAnomalia({
 }
 
 /** editarImagens: só na prévia da tela — permite arrastar/redimensionar imagens no layout livre. */
-export function Previa({
+export const Previa = memo(function Previa({
   r,
   editarImagens,
   visual: v,
@@ -345,21 +345,33 @@ export function Previa({
       ))}
     </div>
   )
-}
+})
 
-/** Na tela, encolhe as folhas A4 para caberem na largura do painel (na impressão não se aplica). */
+/** Na tela, encolhe as folhas A4 para caberem na largura do painel (na impressão não se aplica).
+ *  O zoom é aplicado direto no estilo (sem re-renderizar a prévia), para o arraste do divisor ficar fluido. */
 export function AjustarLargura({ children, largura = 826 }: { children: React.ReactNode; largura?: number }) {
   const caixa = useRef<HTMLDivElement>(null)
-  const [zoom, setZoom] = useState(1)
+  const dentro = useRef<HTMLDivElement>(null)
   useLayoutEffect(() => {
     const el = caixa.current!
-    const obs = new ResizeObserver(() => setZoom(Math.min(1, el.clientWidth / largura)))
+    let quadro = 0
+    const aplicar = () => {
+      cancelAnimationFrame(quadro)
+      quadro = requestAnimationFrame(() => {
+        if (dentro.current) dentro.current.style.zoom = String(Math.min(1, el.clientWidth / largura))
+      })
+    }
+    aplicar()
+    const obs = new ResizeObserver(aplicar)
     obs.observe(el)
-    return () => obs.disconnect()
+    return () => {
+      obs.disconnect()
+      cancelAnimationFrame(quadro)
+    }
   }, [largura])
   return (
     <div ref={caixa} className="w-full">
-      <div style={{ zoom }}>{children}</div>
+      <div ref={dentro}>{children}</div>
     </div>
   )
 }

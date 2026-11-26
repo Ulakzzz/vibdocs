@@ -10,6 +10,7 @@ const pagina = await (await navegador.newContext({ acceptDownloads: true, viewpo
 pagina.on('pageerror', (e) => console.error('erro na página:', e.message))
 await pagina.goto(url)
 await pagina.getByRole('tab', { name: /^Anomalias/ }).click()
+await pagina.locator('.zona-solta').waitFor()
 
 // duas imagens fictícias
 await pagina.evaluate(async () => {
@@ -58,7 +59,12 @@ const estilos = await pecas.evaluateAll((els) => els.map((e) => e.getAttribute('
 console.log('posições depois do arraste:', estilos)
 await pagina.screenshot({ path: `${saida}/livre-tela.png` })
 
-const [download] = await Promise.all([pagina.waitForEvent('download'), pagina.getByRole('button', { name: 'Exportar Word' }).click()])
+const espera = pagina.waitForEvent('download')
+await pagina.getByRole('button', { name: 'Exportar Word' }).click()
+// sem modelo carregado, o app pergunta: exporta no layout padrão
+const semModelo = pagina.getByRole('button', { name: 'Exportar no layout padrão' })
+if (await semModelo.waitFor({ timeout: 2500 }).then(() => true, () => false)) await semModelo.click()
+const download = await espera
 await download.saveAs(`${saida}/livre.docx`)
 await pagina.emulateMedia({ media: 'print' })
 await pagina.pdf({ path: `${saida}/livre.pdf`, preferCSSPageSize: true, printBackground: true })

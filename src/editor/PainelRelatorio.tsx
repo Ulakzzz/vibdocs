@@ -2,6 +2,7 @@
 import { CONDICOES } from '../lib/condicao'
 import {
   gerarCodigo,
+  lembrarArt,
   MESES_QUADRO_PADRAO,
   PADRAO_ANOMALIA,
   PADRAO_QUADRO,
@@ -174,8 +175,8 @@ export function PainelRelatorio({
             atualizar((x) => ({
               ...x,
               equipe: { ...x.equipe, analise: nome, seloAnalise: selo },
-              // quem analisa assina o contato do cabeçalho e a ART
-              ...(perfil ? { contato: { email: perfil.email ?? '', telefone: perfil.telefone ?? '' }, art: perfil.art ?? x.art } : {}),
+              // quem analisa assina o contato do cabeçalho
+              ...(perfil ? { contato: { email: perfil.email ?? '', telefone: perfil.telefone ?? '' }, } : {}),
             }))
           }
         />
@@ -185,8 +186,15 @@ export function PainelRelatorio({
         <Campo rotulo="Telefone no cabeçalho">
           <Texto valor={r.contato?.telefone ?? ''} mudar={(v) => set('contato', { email: r.contato?.email ?? '', telefone: v })} />
         </Campo>
-        <Campo rotulo="ART">
-          <Texto valor={r.art ?? ''} mudar={(v) => set('art', v)} />
+        <Campo rotulo="ART (rodapé)" dica="Vazio = a ART do modelo do Word. Fica lembrada para a usina.">
+          <Texto
+            valor={r.art ?? ''}
+            placeholder="como no modelo"
+            mudar={(v) => {
+              set('art', v)
+              lembrarArt(r.usina, v)
+            }}
+          />
         </Campo>
         <div />
         <Campo rotulo="Aparelho (4.1)">

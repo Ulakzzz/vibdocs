@@ -41,3 +41,8 @@ export const IcPrevia = () => (
     <path d="M13 4v16" />
   </Svg>
 )
+export const IcInicio = () => (
+  <Svg>
+    <path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z" />
+  </Svg>
+)

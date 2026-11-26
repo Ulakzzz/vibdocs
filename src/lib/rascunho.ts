@@ -93,3 +93,29 @@ export function maisRecente(a?: Relatorio, b?: Relatorio) {
   if (!b) return a
   return a.atualizadoEm >= b.atualizadoEm ? a : b
 }
+
+/** Rascunhos guardados neste navegador, do mais recente para o mais antigo. */
+export async function rascunhosRecentes(n = 6): Promise<Relatorio[]> {
+  const { entries } = await import('idb-keyval')
+  const todos = (await entries<string, Relatorio>())
+    .filter(([k, v]) => typeof k === 'string' && k.startsWith('vibdocs.rascunho.') && v && typeof v === 'object' && 'codigo' in v)
+    .map(([, v]) => v)
+  return todos.sort((a, b) => (b.atualizadoEm ?? '').localeCompare(a.atualizadoEm ?? '')).slice(0, n)
+}
+
+/** Resumo da usina no mês, só listando pastas (rápido, não abre planilhas): áreas com rascunho e arquivos emitidos. */
+export async function resumoUsina(raiz: FileSystemDirectoryHandle, usina: string, mesRef: string) {
+  const [aaaa, mm] = mesRef.split('-')
+  const contar = async (partes: string[], tipo: 'pastas' | 'arquivos') => {
+    try {
+      const l = await listar(await subpasta(raiz, partes))
+      return tipo === 'pastas' ? l.pastas.length : l.arquivos.filter((a) => /\.(docx|pdf)$/i.test(a.name)).length
+    } catch {
+      return 0
+    }
+  }
+  return {
+    rascunhos: await contar([PASTA_VIBDOCS, 'rascunhos', usina, aaaa, mm], 'pastas'),
+    emitidos: await contar([PASTA_VIBDOCS, 'emitidos', usina, aaaa, mm], 'arquivos'),
+  }
+}

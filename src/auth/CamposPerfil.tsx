@@ -1,4 +1,5 @@
-// Campos do perfil que vão para o relatório: nome completo, telefone, ART e selo de certificação.
+// Campos do perfil que vão para o relatório: nome completo, telefone e selo de certificação.
+// (A ART não é do técnico: fica nos dados do relatório.)
 import { useState } from 'react'
 import { btnFantasma, btnMini, Campo, Texto } from '../editor/campos'
 import type { DadosPerfil } from '../lib/usuarios'
@@ -37,14 +38,9 @@ export function CamposPerfil({ valor, mudar }: { valor: DadosPerfil; mudar: (v: 
       <Campo rotulo="Nome completo (sai no relatório como equipe técnica)">
         <Texto valor={valor.nomeCompleto ?? ''} mudar={(v) => mudar({ ...valor, nomeCompleto: v })} placeholder="Nome e sobrenome completos" />
       </Campo>
-      <div className="grid grid-cols-2 gap-3">
-        <Campo rotulo="Telefone (cabeçalho do relatório)">
-          <Texto tipo="tel" valor={valor.telefone ?? ''} mudar={(v) => mudar({ ...valor, telefone: v })} placeholder="+55 31 9…" />
-        </Campo>
-        <Campo rotulo="ART / registro (opcional)">
-          <Texto valor={valor.art ?? ''} mudar={(v) => mudar({ ...valor, art: v })} />
-        </Campo>
-      </div>
+      <Campo rotulo="Telefone (cabeçalho do relatório)">
+        <Texto tipo="tel" valor={valor.telefone ?? ''} mudar={(v) => mudar({ ...valor, telefone: v })} placeholder="+55 31 9…" />
+      </Campo>
 
       <div>
         <span className="mb-1 block text-[13px] font-medium text-grafite">Selo de certificação</span>

@@ -52,7 +52,12 @@ await pagina.evaluate(async () => {
 // a 2ª imagem vai para o próximo espaço livre (espectro); move para "foto"
 await pagina.locator('li select').nth(2).selectOption('foto')
 
-const [download] = await Promise.all([pagina.waitForEvent('download'), pagina.getByRole('button', { name: 'Exportar Word' }).click()])
+const espera = pagina.waitForEvent('download')
+await pagina.getByRole('button', { name: 'Exportar Word' }).click()
+// sem modelo carregado, o app pergunta: exporta no layout padrão
+const semModelo = pagina.getByRole('button', { name: 'Exportar no layout padrão' })
+if (await semModelo.waitFor({ timeout: 2500 }).then(() => true, () => false)) await semModelo.click()
+const download = await espera
 await download.saveAs(saida)
 console.log(`ok: ${download.suggestedFilename()} → ${saida}`)
 await navegador.close()
