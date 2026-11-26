@@ -1,10 +1,11 @@
 // Triagem: condição de cada equipamento (editável), "Normal" rápido, mapa de condição dos meses
 // anteriores e equipamentos adicionados à mão.
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { CONDICOES } from '../lib/condicao'
 import { mesCurto } from '../lib/historico'
 import { condicaoNoMes, reincidenciaAuto, TODAS_CONDICOES, type EquipRel, type Relatorio } from '../lib/relatorio'
 import { Abas, btn, btnMini } from './campos'
+import { avisar, desfazerUltima } from '../ui/Avisos'
 
 type Atualizar = (f: (r: Relatorio) => Relatorio) => void
 
@@ -147,13 +148,38 @@ export function PainelEquipamentos({
     localStorage.setItem(CHAVE_MESES, String(n))
   }
 
+  const [destaque, setDestaque] = useState<string>()
+  const tempoDestaque = useRef<ReturnType<typeof setTimeout>>(undefined)
+  // a paleta (Ctrl+K) pede para mostrar um equipamento: troca o filtro se preciso, rola até ele e pisca a linha
+  useEffect(() => {
+    const mostrar = (ev: Event) => {
+      const local = (ev as CustomEvent<string>).detail
+      const e = r.equipamentos.find((x) => x.local === local)
+      if (filtro === 'executados' && !e?.executado) setFiltro('todos')
+      if (filtro === 'anomalias' && e && !r.condicoesAnomalia.includes(e.condicao)) setFiltro('todos')
+      setTimeout(() => {
+        const linha = document.querySelector<HTMLElement>(`[data-local-eq="${CSS.escape(local)}"]`)
+        if (!linha) return
+        linha.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      }, 60)
+      setDestaque(local)
+      clearTimeout(tempoDestaque.current)
+      tempoDestaque.current = setTimeout(() => setDestaque(undefined), 1700)
+    }
+    addEventListener('vibdocs:mostrar-equipamento', mostrar)
+    return () => removeEventListener('vibdocs:mostrar-equipamento', mostrar)
+  }, [r, filtro])
+
   const mudarCondicao = (local: string, condicao: string) => {
     const e = r.equipamentos.find((x) => x.local === local)
     atualizar((x) => ({ ...x, equipamentos: x.equipamentos.map((q) => (q.local === local ? { ...q, condicao } : q)) }))
     if (e && e.condicao !== condicao) aoMudarCondicao?.(e, condicao)
   }
 
-  const remover = (local: string) => atualizar((x) => ({ ...x, equipamentos: x.equipamentos.filter((e) => e.local !== local) }))
+  const remover = (local: string) => {
+    atualizar((x) => ({ ...x, equipamentos: x.equipamentos.filter((e) => e.local !== local) }))
+    avisar(`${local} removido do relatório.`, 'info', { rotulo: 'Desfazer', fazer: desfazerUltima })
+  }
 
   const adicionar = () => {
     const local = novo.local.trim()
@@ -230,7 +256,10 @@ export function PainelEquipamentos({
             const alterada = e.condicaoPlanilha !== undefined && e.condicaoPlanilha !== e.condicao
             return (
               <Fragment key={e.local}>
-              <tr className="linha-viva acoes-no-hover border-b border-linha/70 align-middle">
+              <tr
+                className={`linha-viva acoes-no-hover border-b border-linha/70 align-middle ${destaque === e.local ? 'piscar' : ''}`}
+                data-local-eq={e.local}
+              >
                 <td className="py-2 pr-2 pl-3 whitespace-nowrap">
                   <span className="tag">{e.local}</span>
                   {e.manual && <span className="ml-1.5 rounded-full bg-sinal px-1.5 text-[11px] font-semibold text-preto">manual</span>}
@@ -258,7 +287,13 @@ export function PainelEquipamentos({
                 <td className="py-2 pr-2 text-right whitespace-nowrap">
                   <span className="acoes">
                     {e.condicao !== '1' && (
-                      <button className={btnMini} onClick={() => mudarCondicao(e.local, '1')}>
+                      <button
+                        className={btnMini}
+                        onClick={() => {
+                          mudarCondicao(e.local, '1')
+                          if (!e.celula) avisar(`${e.local} marcado como Normal.`, 'info', { rotulo: 'Desfazer', fazer: desfazerUltima })
+                        }}
+                      >
                         Normal
                       </button>
                     )}

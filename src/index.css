@@ -2093,3 +2093,176 @@ main,
 .estado-salvo {
   cursor: help;
 }
+
+/* botões só com ícone (desfazer/refazer) */
+.bt-icone {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  color: var(--color-grafite);
+  transition:
+    background-color 0.2s,
+    color 0.2s,
+    transform 0.15s;
+}
+.bt-icone:hover:not(:disabled) {
+  background: var(--t-hover);
+  color: var(--color-texto);
+}
+.bt-icone:active:not(:disabled) {
+  transform: scale(0.9) rotate(-8deg);
+}
+.bt-icone:disabled {
+  opacity: 0.3;
+}
+.aviso-acao {
+  margin-left: 6px;
+  font-weight: 700;
+  color: var(--color-texto) !important;
+  font-size: 0.85rem !important;
+  text-decoration: underline;
+  text-decoration-color: var(--color-sinal);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 2px;
+  white-space: nowrap;
+}
+.aviso .aviso-acao {
+  margin-left: auto;
+}
+.aviso .aviso-acao + button {
+  margin-left: 8px;
+}
+
+/* ================= Paleta de comandos (Ctrl+K) ================= */
+.paleta-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+  background: rgb(0 0 0 / 0.35);
+  backdrop-filter: blur(3px);
+  animation: fundo-entra 0.2s ease both;
+}
+@keyframes fundo-entra {
+  from {
+    opacity: 0;
+  }
+}
+.paleta {
+  display: flex;
+  flex-direction: column;
+  width: min(640px, calc(100vw - 32px));
+  max-height: 70vh;
+  overflow: hidden;
+  border: 1px solid var(--color-linha);
+  border-radius: 18px;
+  background: var(--color-elevada);
+  box-shadow: 0 30px 80px rgb(0 0 0 / 0.35);
+  animation: paleta-entra 0.32s cubic-bezier(0.2, 0.9, 0.2, 1.1) both;
+}
+@keyframes paleta-entra {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.97);
+  }
+}
+.paleta-busca {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-linha);
+  color: var(--color-cinza);
+}
+.paleta-busca input {
+  flex: 1;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 1rem;
+  color: var(--color-texto);
+}
+.paleta kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--color-linha);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.7rem;
+  color: var(--color-cinza);
+}
+.paleta-lista {
+  overflow: auto;
+  padding: 6px;
+  scroll-behavior: smooth;
+}
+.paleta-grupo {
+  padding: 10px 10px 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-cinza);
+}
+.paleta-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+.paleta-item.ativo {
+  background: color-mix(in srgb, var(--color-sinal) 22%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-sinal);
+}
+.paleta-tipo {
+  width: 7.5rem;
+  flex: none;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  color: var(--color-cinza);
+}
+.paleta-detalhe {
+  color: var(--color-cinza);
+  font-size: 0.8rem;
+}
+.paleta-cor {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+}
+.paleta-vazio {
+  padding: 18px;
+  text-align: center;
+  color: var(--color-cinza);
+  font-size: 0.9rem;
+}
+.paleta-rodape {
+  display: flex;
+  gap: 16px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--color-linha);
+  font-size: 0.72rem;
+  color: var(--color-cinza);
+}
+
+/* linha que a paleta mostrou */
+@keyframes piscar {
+  0%,
+  60% {
+    background: color-mix(in srgb, var(--color-sinal) 35%, transparent);
+  }
+}
+tr.piscar {
+  animation: piscar 1.6s ease-out;
+}

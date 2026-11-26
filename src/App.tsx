@@ -8,6 +8,8 @@ import { Carregando, Contador, Copiar } from './ui/Contador'
 import { comTransicao } from './ui/transicao'
 import { Seletor } from './ui/Seletor'
 import { Avisos, avisar } from './ui/Avisos'
+import { Paleta, type ItemPaleta } from './ui/Paleta'
+import { CONDICOES } from './lib/condicao'
 import { gravarCondicoes } from './lib/planilhaEscrita'
 import { IcAnomalia, IcEquipamentos, IcInicio, IcMais, IcPrevia, IcRelatorio } from './ui/Icones'
 import { Marca, Moldura } from './ui/Moldura'
@@ -37,6 +39,7 @@ import { historicoDemo, linhasDemo } from './lib/demo'
 import { carregarHistoricoPasta, mesDoNome, montarExecucao, montarHistorico, type Execucao, type FonteHistorico, type Historico } from './lib/historico'
 import { escolherPasta, esquecerPasta, navegadorSuportado, pastaLembrada, reconectar } from './lib/pasta'
 import { guardarModelo, obterModelo, visualDoModelo, type VisualModelo } from './lib/modelo'
+import { rascunhosRecentes } from './lib/rascunho'
 import { lerDaPasta, lerLocal, maisRecente, proximaSequencia, salvarEmitido, salvarLocal, salvarNaPasta } from './lib/rascunho'
 import { anomaliaDe, aplicarHistorico, artDaUsina, type PerfilTecnico, equipamentosAnomalia, hojeISO, mesmoHistorico, normalizar, novoRelatorio, type EquipRel, type ImagemRef, type Relatorio } from './lib/relatorio'
 import { AjustarLargura, Previa } from './report/Previa'
@@ -118,6 +121,22 @@ export default function App() {
   const pendente = useRef<{ mesRef: string; sigla: string }>(undefined)
   const [anomaliaSel, setAnomaliaSel] = useState<string>()
   const [previaAberta, setPreviaAberta] = useState(true)
+  // paleta de comandos (Ctrl+K)
+  const [paleta, setPaleta] = useState(false)
+  const [recentesPaleta, setRecentesPaleta] = useState<Relatorio[]>([])
+  useEffect(() => {
+    const tecla = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaleta((v) => !v)
+      }
+    }
+    addEventListener('keydown', tecla)
+    return () => removeEventListener('keydown', tecla)
+  }, [])
+  useEffect(() => {
+    if (paleta) rascunhosRecentes(8).then(setRecentesPaleta).catch(() => setRecentesPaleta([]))
+  }, [paleta])
   const [estado, setEstado] = useState<Estado>('salvo')
   const [salvoEm, setSalvoEm] = useState('')
   const sujo = useRef(false)
@@ -248,12 +267,39 @@ export default function App() {
     return () => removeEventListener('beforeunload', aviso)
   }, [])
 
+  // ---------- desfazer / refazer (Ctrl+Z, Ctrl+Y) ----------
+  // Cada alteração guarda o estado anterior; digitação seguida (menos de 0,8 s entre teclas) vira um passo só.
+  const relAtual = useRef(rel)
+  relAtual.current = rel
+  const passado = useRef<Relatorio[]>([])
+  const futuro = useRef<Relatorio[]>([])
+  const ultimoPasso = useRef(0)
+  const [passos, setPassos] = useState({ voltar: 0, avancar: 0 })
+  const contarPassos = () => setPassos({ voltar: passado.current.length, avancar: futuro.current.length })
+
   const atualizar = useCallback((f: (r: Relatorio) => Relatorio) => {
+    const antes = relAtual.current
+    const agora = Date.now()
+    if (antes && agora - ultimoPasso.current > 800) {
+      passado.current.push(antes)
+      if (passado.current.length > 80) passado.current.shift()
+    }
+    ultimoPasso.current = agora
+    futuro.current = []
+    setPassos({ voltar: passado.current.length, avancar: 0 })
     sujo.current = true
     setRel((r) =>
       r ? normalizar({ ...f(r), atualizadoEm: new Date().toISOString(), atualizadoPor: usuarioRef.current || r.atualizadoPor }) : r,
     )
   }, [])
+
+  // Outro relatório aberto: o histórico de desfazer recomeça
+  const idRel = rel ? `${rel.usina}|${rel.mesReferencia}|${rel.sigla}|${rel.criadoEm}` : ''
+  useEffect(() => {
+    passado.current = []
+    futuro.current = []
+    setPassos({ voltar: 0, avancar: 0 })
+  }, [idRel])
 
   // Mantém a cópia do histórico do relatório em dia (só grava se mudou).
   useEffect(() => {
@@ -441,7 +487,10 @@ export default function App() {
           const info = await localizarPlanilha(raiz, u, ano, mesPasta)
           await gravarCondicoes(info.arquivo, aba, [{ celula: e.celula!, valor: c }])
           atualizar((x) => ({ ...x, equipamentos: x.equipamentos.map((q) => (q.local === e.local ? { ...q, condicaoPlanilha: c } : q)) }))
-          avisar(`Planilha de controle atualizada: ${e.local} → ${c || 'em branco'} (célula ${e.celula}).`, 'ok')
+          avisar(`Planilha de controle atualizada: ${e.local} → ${c || 'em branco'} (célula ${e.celula}).`, 'ok', {
+            rotulo: 'Desfazer',
+            fazer: () => andarRef.current('voltar'),
+          })
         } catch (err) {
           avisar(`Não gravei na planilha: ${(err as Error).message} Se ela estiver aberta no Excel, feche e escolha a condição de novo.`, 'erro')
         }
@@ -449,6 +498,53 @@ export default function App() {
     },
     [raiz, rel, mes, linhas, usina, atualizar],
   )
+
+  // volta/avança um passo; condições que mudaram também voltam na planilha de controle
+  const andarHistorico = useCallback(
+    (direcao: 'voltar' | 'avancar') => {
+      const de = direcao === 'voltar' ? passado.current : futuro.current
+      const para = direcao === 'voltar' ? futuro.current : passado.current
+      const atual = relAtual.current
+      const alvo = de.pop()
+      if (!alvo || !atual) return
+      para.push(atual)
+      ultimoPasso.current = 0
+      contarPassos()
+      sujo.current = true
+      setRel({ ...alvo, atualizadoEm: new Date().toISOString() })
+      const antes = new Map(atual.equipamentos.map((e) => [e.local, e.condicao]))
+      for (const e of alvo.equipamentos) if (antes.has(e.local) && antes.get(e.local) !== e.condicao) gravarNaPlanilha(e, e.condicao)
+      avisar(direcao === 'voltar' ? 'Alteração desfeita.' : 'Alteração refeita.', 'info', {
+        rotulo: direcao === 'voltar' ? 'Refazer' : 'Desfazer',
+        fazer: () => andarRef.current(direcao === 'voltar' ? 'avancar' : 'voltar'),
+      })
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [gravarNaPlanilha],
+  )
+  const andarRef = useRef(andarHistorico)
+  andarRef.current = andarHistorico
+
+  // Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z): fora de campos de texto, para não brigar com o desfazer da digitação
+  useEffect(() => {
+    const tecla = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      const alvo = e.target as HTMLElement
+      if (alvo.closest('input, textarea, [contenteditable="true"]')) return
+      const k = e.key.toLowerCase()
+      if (k === 'z' && !e.shiftKey) andarRef.current('voltar')
+      else if (k === 'y' || (k === 'z' && e.shiftKey)) andarRef.current('avancar')
+      else return
+      e.preventDefault()
+    }
+    const pedido = () => andarRef.current('voltar')
+    addEventListener('keydown', tecla)
+    addEventListener('vibdocs:desfazer', pedido)
+    return () => {
+      removeEventListener('keydown', tecla)
+      removeEventListener('vibdocs:desfazer', pedido)
+    }
+  }, [])
 
   const editarImagens = useCallback(
     (local: string, imagens: ImagemRef[]) =>
@@ -595,6 +691,64 @@ export default function App() {
               : ''
   const ind = rel ? calcularIndicadores(rel) : undefined
   const atualInd = ind && { exec: ind.execucao.at(-1)?.indice ?? null, reinc: ind.reincidencia.at(-1)?.indice ?? null }
+  const irParaEquipamento = (local: string) => {
+    if (!rel) return
+    if (equipamentosAnomalia(rel).some((e) => e.local === local))
+      comTransicao(() => {
+        setTela('relatorio')
+        setAba('anomalias')
+        setAnomaliaSel(local)
+      })
+    else {
+      comTransicao(() => {
+        setTela('relatorio')
+        setAba('equipamentos')
+      })
+      setTimeout(() => window.dispatchEvent(new CustomEvent('vibdocs:mostrar-equipamento', { detail: local })), 120)
+    }
+  }
+  const itensPaleta: ItemPaleta[] = [
+    { id: 'a-inicio', grupo: 'Ações', rotulo: 'Ir para o início', fazer: () => comTransicao(() => setTela('inicio')) },
+    ...(rel
+      ? ([
+          { id: 'a-rel', grupo: 'Ações', rotulo: 'Aba Relatório', fazer: () => comTransicao(() => (setTela('relatorio'), setAba('relatorio'))) },
+          { id: 'a-eq', grupo: 'Ações', rotulo: 'Aba Equipamentos', fazer: () => comTransicao(() => (setTela('relatorio'), setAba('equipamentos'))) },
+          { id: 'a-an', grupo: 'Ações', rotulo: 'Aba Anomalias', fazer: () => comTransicao(() => (setTela('relatorio'), setAba('anomalias'))) },
+          { id: 'a-pdf', grupo: 'Ações', rotulo: 'Exportar PDF', fazer: exportarPdf },
+          { id: 'a-word', grupo: 'Ações', rotulo: 'Exportar Word', fazer: () => exportarWord() },
+          { id: 'a-previa', grupo: 'Ações', rotulo: previaAberta ? 'Fechar a prévia' : 'Abrir a prévia', fazer: () => setPreviaAberta((v) => !v) },
+          { id: 'a-desf', grupo: 'Ações', rotulo: 'Desfazer', atalho: 'Ctrl Z', fazer: () => andarHistorico('voltar') },
+          { id: 'a-ref', grupo: 'Ações', rotulo: 'Refazer', atalho: 'Ctrl Y', fazer: () => andarHistorico('avancar') },
+        ] as ItemPaleta[])
+      : []),
+    { id: 'a-avulso', grupo: 'Ações', rotulo: 'Novo relatório avulso', detalhe: usina, fazer: () => novoAvulso() },
+    ...USINAS.map((u) => ({ id: `u-${u}`, grupo: 'Usinas', rotulo: u, detalhe: 'abrir usina', fazer: () => abrirUsina(u) })),
+    ...(tela === 'relatorio'
+      ? siglas.map(([sg, n]) => ({
+          id: `s-${sg}`,
+          grupo: 'Áreas',
+          rotulo: sg,
+          detalhe: `${n} equipamentos · ${usina}`,
+          fazer: () => comTransicao(() => setSigla(sg)),
+        }))
+      : []),
+    ...(rel?.equipamentos ?? []).map((e) => ({
+      id: `e-${e.local}`,
+      grupo: 'Equipamentos',
+      rotulo: e.local,
+      detalhe: e.descricao,
+      cor: CONDICOES[e.condicao]?.cor,
+      fazer: () => irParaEquipamento(e.local),
+    })),
+    ...recentesPaleta.map((r) => ({
+      id: `r-${r.usina}-${r.mesReferencia}-${r.sigla}-${r.codigo}`,
+      grupo: 'Rascunhos recentes',
+      rotulo: r.codigo,
+      detalhe: `${r.usina} · ${r.areaTitulo || r.sigla}`,
+      fazer: () => continuar(r),
+    })),
+  ]
+
   const abasTrilho: [Aba, string, () => ReactNode][] = [
     ['relatorio', 'Relatório', IcRelatorio],
     ['equipamentos', 'Equipamentos', IcEquipamentos],
@@ -623,6 +777,12 @@ export default function App() {
               )}
             </button>
           ))}
+          <button className="trilho-item" title="Buscar (Ctrl+K)" aria-label="Buscar" onClick={() => setPaleta(true)}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3.5-3.5" />
+            </svg>
+          </button>
           <div className="my-2 h-px w-8 bg-white/10" />
           <button className="trilho-item" title="Novo relatório avulso (qualquer usina ou área, fora da planilha)" onClick={() => novoAvulso()}>
             <IcMais />
@@ -719,6 +879,20 @@ export default function App() {
 
             <div className="ml-auto flex items-center gap-2">
               {carregandoHist && <span className="text-xs text-amber-700">{carregandoHist}</span>}
+              <span className="flex items-center" role="group" aria-label="Desfazer e refazer">
+                <button className="bt-icone" onClick={() => andarHistorico('voltar')} disabled={!passos.voltar} title="Desfazer (Ctrl+Z)" aria-label="Desfazer">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M9 14L4 9l5-5" />
+                    <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+                  </svg>
+                </button>
+                <button className="bt-icone" onClick={() => andarHistorico('avancar')} disabled={!passos.avancar} title="Refazer (Ctrl+Y)" aria-label="Refazer">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M15 14l5-5-5-5" />
+                    <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
+                  </svg>
+                </button>
+              </span>
               <span
                 className={`estado-salvo mr-1 flex items-center gap-1.5 text-xs ${estado === 'erro' ? 'text-red-700' : 'text-cinza'}`}
                 title={`Salvamento automático 1,5 s depois de cada alteração, neste navegador${raiz ? ' e na pasta do SharePoint' : ''}. Continua salvo ao fechar o site ou desligar o computador.`}
@@ -848,6 +1022,7 @@ export default function App() {
       </div>
 
       <Avisos />
+      {paleta && <Paleta itens={itensPaleta} fechar={() => setPaleta(false)} />}
       {pedirModelo && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-6 backdrop-blur-[3px]" onMouseDown={() => setPedirModelo(false)}>
           <div

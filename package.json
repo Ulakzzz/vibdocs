@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "pdf:teste": "node scripts/pdf-teste.mjs",
     "word:teste": "node scripts/word-teste.mjs",
-    "livre:teste": "node scripts/livre-teste.mjs"
+    "livre:teste": "node scripts/livre-teste.mjs",
+    "paleta:teste": "node scripts/paleta-teste.mjs"
   },
   "dependencies": {
     "@fontsource-variable/archivo": "^5.3.0",
