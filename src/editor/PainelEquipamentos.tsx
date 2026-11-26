@@ -303,6 +303,13 @@ export function PainelEquipamentos({
                         Desfazer
                       </button>
                     )}
+                    <button
+                      className={`${btnMini} ml-1`}
+                      title="Tendência e espectros no banco Omnitrend"
+                      onClick={() => window.dispatchEvent(new CustomEvent('vibdocs:banco', { detail: { tag: e.local, descricao: e.descricao } }))}
+                    >
+                      Banco
+                    </button>
                     {e.manual && (
                       <button className={`${btnMini} ml-1`} onClick={() => remover(e.local)}>
                         Remover

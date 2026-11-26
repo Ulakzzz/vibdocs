@@ -45,6 +45,7 @@ import { anomaliaDe, aplicarHistorico, artDaUsina, paginaPreenchida, type Perfil
 import { AjustarLargura, Previa } from './report/Previa'
 import { Inicio } from './inicio/Inicio'
 import { HistoricoPreditivo } from './historico/HistoricoPreditivo'
+import { BancoVibracao, type FocoBanco } from './banco/BancoVibracao'
 
 type Aba = 'relatorio' | 'equipamentos' | 'anomalias'
 type Estado = 'salvo' | 'salvando' | 'pendente' | 'erro'
@@ -117,7 +118,18 @@ export default function App() {
   const [rel, setRel] = useState<Relatorio>()
   const [aba, setAba] = useState<Aba>('equipamentos')
   // depois do login: página inicial (escolha da usina) e só então o editor
-  const [tela, setTela] = useState<'inicio' | 'relatorio' | 'historico'>('inicio')
+  const [tela, setTela] = useState<'inicio' | 'relatorio' | 'historico' | 'banco'>('inicio')
+  // banco de vibração (Omnitrend): equipamento pedido por um botão "Banco"
+  const [focoBanco, setFocoBanco] = useState<FocoBanco>()
+  useEffect(() => {
+    const pedido = (ev: Event) => {
+      const d = (ev as CustomEvent<{ tag?: string; descricao?: string }>).detail ?? {}
+      if (d.tag) setFocoBanco((x) => ({ tag: d.tag!, descricao: d.descricao ?? '', n: (x?.n ?? 0) + 1 }))
+      comTransicao(() => setTela('banco'))
+    }
+    addEventListener('vibdocs:banco', pedido)
+    return () => removeEventListener('vibdocs:banco', pedido)
+  }, [])
   // página do Histórico preditivo: busca pedida (ex.: pelo botão da anomalia)
   const [buscaHP, setBuscaHP] = useState<{ busca: string; sugestoes: string[]; n: number }>({ busca: '', sugestoes: [], n: 0 })
   useEffect(() => {
@@ -728,6 +740,12 @@ export default function App() {
   const itensPaleta: ItemPaleta[] = [
     { id: 'a-inicio', grupo: 'Ações', rotulo: 'Ir para o início', fazer: () => comTransicao(() => setTela('inicio')) },
     {
+      id: 'a-banco',
+      grupo: 'Ações',
+      rotulo: 'Banco de vibração (tendências e espectros)',
+      fazer: () => window.dispatchEvent(new CustomEvent('vibdocs:banco', { detail: {} })),
+    },
+    {
       id: 'a-hist',
       grupo: 'Ações',
       rotulo: 'Histórico preditivo (relatórios antigos)',
@@ -803,6 +821,19 @@ export default function App() {
           ))}
           <button
             className="trilho-item"
+            aria-current={tela === 'banco' ? 'page' : undefined}
+            title="Banco de vibração (Omnitrend)"
+            aria-label="Banco de vibração"
+            onClick={() => window.dispatchEvent(new CustomEvent('vibdocs:banco', { detail: {} }))}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <ellipse cx="12" cy="5.5" rx="7.5" ry="2.8" />
+              <path d="M4.5 5.5v13c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8v-13" />
+              <path d="M7 14l2-3 2 4 2-6 2 5 2-2" />
+            </svg>
+          </button>
+          <button
+            className="trilho-item"
             aria-current={tela === 'historico' ? 'page' : undefined}
             title="Histórico preditivo (relatórios antigos)"
             aria-label="Histórico preditivo"
@@ -864,7 +895,11 @@ export default function App() {
           )}
         </aside>
 
-        {tela === 'historico' ? (
+        {tela === 'banco' ? (
+          <main className="min-w-0 flex-1 overflow-auto">
+            <BancoVibracao raiz={raiz} linhas={linhas} usuario={usuario?.nome ?? ''} foco={focoBanco} />
+          </main>
+        ) : tela === 'historico' ? (
           <main className="min-w-0 flex-1 overflow-auto">
             <HistoricoPreditivo key={buscaHP.n} buscaInicial={buscaHP.busca} sugestoes={buscaHP.sugestoes} />
           </main>

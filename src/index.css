@@ -2508,3 +2508,254 @@ tr.piscar {
   color: var(--color-cinza);
   padding-top: 2px;
 }
+
+/* ================= Banco de vibração ================= */
+.banco-grade {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 1000px) {
+  .banco-grade {
+    grid-template-columns: 1fr;
+  }
+}
+.banco-arvore {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 40px);
+  border: 1px solid var(--color-linha);
+  border-radius: 18px;
+  background: var(--color-superficie);
+  padding: 12px;
+}
+.banco-arvore details summary {
+  margin-top: 8px;
+  padding: 4px 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-cinza);
+  cursor: pointer;
+}
+.banco-maq {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 9px;
+  font-size: 0.85rem;
+  text-align: left;
+  transition: background-color 0.15s;
+}
+.banco-maq:hover {
+  background: var(--t-hover);
+}
+.banco-maq.on {
+  background: color-mix(in srgb, var(--color-sinal) 22%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-sinal);
+}
+.banco-ponto {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+}
+.banco-link {
+  margin-left: auto;
+  font-size: 0.75rem;
+}
+.banco-arq {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  border: 1px solid var(--color-linha);
+  border-radius: 14px;
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 0.85rem;
+  transition:
+    border-color 0.2s,
+    transform 0.2s var(--ease-mola);
+}
+.banco-arq:hover {
+  border-color: var(--color-sinal);
+  transform: translateY(-2px);
+}
+.banco-arq.on {
+  border-color: var(--color-sinal);
+  background: color-mix(in srgb, var(--color-sinal) 12%, transparent);
+}
+.banco-arq small {
+  color: var(--color-cinza);
+}
+.banco-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 3px 4px 3px 10px;
+  background: var(--color-sinal);
+  color: #000;
+  font-size: 0.8rem;
+}
+.banco-tag small {
+  opacity: 0.7;
+}
+.banco-tag button {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.12);
+}
+.banco-comp {
+  border: 1px solid var(--color-linha);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.8rem;
+}
+.banco-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.banco-tabela th {
+  padding: 6px 8px;
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-cinza);
+  border-bottom: 1px solid var(--color-linha);
+}
+.banco-tabela td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--color-linha);
+  vertical-align: top;
+}
+.banco-valor {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--c) 18%, transparent);
+  box-shadow: inset 0 0 0 1.5px var(--c);
+}
+.banco-valor small {
+  font-weight: 400;
+  opacity: 0.7;
+}
+.banco-data {
+  border: 1.5px solid var(--color-linha);
+  border-radius: 999px;
+  padding: 2px 9px;
+  transition: border-color 0.2s;
+}
+.banco-data.on {
+  font-weight: 700;
+}
+.banco-nota {
+  width: 3.2rem;
+  flex: none;
+  border-radius: 999px;
+  padding: 1px 0;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #000;
+  background: color-mix(in srgb, #00b050 calc(var(--n) * 100%), #ffc000);
+}
+.banco-pendente {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  border: 1.5px dashed var(--color-sinal);
+  border-radius: 14px;
+  padding: 10px 14px;
+}
+.grafico-banco svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  touch-action: none;
+}
+.grafico-banco .grade {
+  stroke: var(--color-linha);
+  stroke-width: 1;
+}
+.grafico-banco .eixo {
+  fill: var(--color-cinza);
+  font-size: 11px;
+}
+.grafico-banco .serie {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.grafico-banco .serie.fina {
+  stroke-width: 1.2;
+}
+.grafico-banco .marca {
+  fill: currentColor;
+}
+.grafico-banco .lim-alerta {
+  stroke: #ffc000;
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+}
+.grafico-banco .lim-alarme {
+  stroke: #ff2a2a;
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+}
+.grafico-banco .lim-txt {
+  font-weight: 700;
+}
+.grafico-banco .harmonico {
+  stroke: color-mix(in srgb, var(--color-sinal) 55%, transparent);
+  stroke-dasharray: 2 3;
+}
+.grafico-banco .harm-txt {
+  fill: var(--color-sinal);
+  font-weight: 700;
+}
+.grafico-banco .mira {
+  stroke: var(--color-texto);
+  stroke-opacity: 0.35;
+}
+.legenda-banco {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 6px;
+  font-size: 0.8rem;
+}
+.legenda-banco span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.legenda-banco i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.legenda-banco b {
+  font-weight: 650;
+}
+.zoom-bt {
+  border-radius: 999px;
+  padding: 2px 9px;
+  border: 1px solid var(--color-linha);
+}
+.zoom-bt.on {
+  background: var(--color-sinal);
+  color: #000;
+  border-color: transparent;
+}

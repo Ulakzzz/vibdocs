@@ -129,6 +129,14 @@ function EditorAnomalia({ r, e, atualizar, mudarCondicao }: { r: Relatorio; e: E
           <button
             type="button"
             className="bt bt-sec"
+            title="Tendência e espectros deste equipamento no banco Omnitrend"
+            onClick={() => window.dispatchEvent(new CustomEvent('vibdocs:banco', { detail: { tag: e.local, descricao: e.descricao } }))}
+          >
+            Banco
+          </button>
+          <button
+            type="button"
+            className="bt bt-sec"
             title="Buscar relatórios antigos deste equipamento no Histórico preditivo"
             onClick={() =>
               window.dispatchEvent(
