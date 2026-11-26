@@ -7,6 +7,7 @@ import { calcularIndicadores } from './lib/indicadores'
 import { Contador } from './ui/Contador'
 import { IcAnomalia, IcEquipamentos, IcMais, IcPrevia, IcRelatorio } from './ui/Icones'
 import { Marca, Moldura } from './ui/Moldura'
+import { BotaoTema } from './ui/Tema'
 import {
   encerrarSessao,
   PAPEIS,
@@ -482,6 +483,7 @@ export default function App() {
             <IcMais />
           </button>
           <div className="flex-1" />
+          <BotaoTema className="trilho-item" />
           {usuario && (
             <details className="relative">
               <summary className="trilho-item cursor-pointer list-none" title={usuario.nome}>
@@ -489,7 +491,7 @@ export default function App() {
                   {usuario.nome.trim().charAt(0).toUpperCase()}
                 </span>
               </summary>
-              <div className="surgir absolute bottom-0 left-full z-40 ml-3 w-60 rounded-[14px] border border-linha bg-white p-1.5 text-sm shadow-xl">
+              <div className="surgir absolute bottom-0 left-full z-40 ml-3 w-60 rounded-[14px] border border-linha bg-elevada p-1.5 text-sm shadow-[var(--t-sombra)]">
                 <div className="px-2.5 py-2">
                   <div className="font-semibold">{usuario.nome}</div>
                   <div className="text-xs text-cinza">
@@ -523,7 +525,7 @@ export default function App() {
 
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Barra superior: caminho Usina / Mês / Área e ações */}
-          <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-linha bg-white px-5 py-3">
+          <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-linha bg-superficie px-5 py-3">
             {!rel?.avulso ? (
               <nav className="caminho flex items-center gap-1 text-sm" aria-label="Relatório aberto">
                 <select value={usina} onChange={(e) => setUsina(e.target.value)} disabled={!raiz} aria-label="Usina">
@@ -668,7 +670,7 @@ export default function App() {
                   <>
                     <Separator className="divisor mx-1.5 w-2" />
                     <Panel defaultSize="48" minSize="20">
-                      <div className="painel h-full overflow-auto bg-[#e9e9e6]">
+                      <div className="painel h-full overflow-auto bg-[var(--t-tela-previa)]">
                         <Previa
                           r={rel}
                           editarImagens={(local, imagens) =>

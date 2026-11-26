@@ -2,17 +2,56 @@
 
 /* ================= Tokens (ver docs/VibDocs-design.md) ================= */
 @theme {
+  /* marca: não mudam com o tema */
   --color-sinal: #ffc20e; /* amarelo do logo: ação principal, ativo, foco */
-  --color-sinal-claro: #fff3cc;
-  --color-preto: #000000;
-  --color-grafite: #3a3a38;
-  --color-cinza: #6f6f6b;
-  --color-nevoa: #f3f3f1;
-  --color-linha: #e4e4e0;
+  --color-preto: #000000; /* trilho lateral e texto sobre o amarelo */
+  /* semânticas: mudam com o tema (valores abaixo e em [data-tema='escuro']) */
+  --color-nevoa: var(--t-fundo);
+  --color-superficie: var(--t-superficie);
+  --color-elevada: var(--t-elevada);
+  --color-texto: var(--t-texto);
+  --color-grafite: var(--t-texto-2);
+  --color-cinza: var(--t-texto-3);
+  --color-linha: var(--t-linha);
+  --color-sinal-claro: var(--t-sinal-suave);
   --font-sans: 'Archivo Variable', 'Segoe UI', Arial, sans-serif;
   --radius-painel: 16px;
   --radius-campo: 10px;
   --ease-mola: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ================= Temas ================= */
+/* Claro (padrão) */
+:root {
+  color-scheme: light;
+  --t-fundo: #f3f3f1;
+  --t-superficie: #ffffff;
+  --t-elevada: #ffffff;
+  --t-hover: #f7f7f5;
+  --t-texto: #0c0c0b;
+  --t-texto-2: #3a3a38;
+  --t-texto-3: #6f6f6b;
+  --t-linha: #e4e4e0;
+  --t-linha-forte: #cfcfca;
+  --t-sinal-suave: #fff3cc;
+  --t-tela-previa: #e9e9e6;
+  --t-sombra: 0 12px 32px rgb(0 0 0 / 0.14);
+}
+/* Escuro: fundo grafite (não preto puro), superfícies mais claras para dar elevação, texto quase branco */
+:root[data-tema='escuro'] {
+  color-scheme: dark;
+  --t-fundo: #0f0f0e;
+  --t-superficie: #181817;
+  --t-elevada: #222220;
+  --t-hover: #1f1f1d;
+  --t-texto: #f1f1ed;
+  --t-texto-2: #c9c9c3;
+  --t-texto-3: #9a9a93;
+  --t-linha: #2c2c29;
+  --t-linha-forte: #3b3b37;
+  --t-sinal-suave: #3a2f08;
+  --t-tela-previa: #262624;
+  --t-sombra: 0 12px 32px rgb(0 0 0 / 0.55);
 }
 
 html,
@@ -24,8 +63,9 @@ body,
 body {
   font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
-  color: var(--color-preto);
+  color: var(--color-texto);
   background: var(--color-nevoa);
+  transition: background-color 0.3s, color 0.3s;
   -webkit-font-smoothing: antialiased;
   accent-color: var(--color-preto);
 }
@@ -62,11 +102,12 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  height: 2.25rem;
-  padding: 0 0.9rem;
-  border-radius: var(--radius-campo);
+  height: 2.35rem;
+  padding: 0 1.05rem;
+  border-radius: 999px;
   font-size: 0.875rem;
-  font-weight: 550;
+  font-weight: 600;
+  font-stretch: 105%;
   white-space: nowrap;
   transition:
     color 0.25s var(--ease-mola),
@@ -105,12 +146,15 @@ body {
   color: var(--color-sinal);
 }
 .bt-sec {
-  background: #fff;
+  background: var(--color-superficie);
   border: 1px solid var(--color-linha);
-  color: var(--color-preto);
+  color: var(--color-texto);
 }
 .bt-sec::before {
   background: var(--color-sinal-claro);
+}
+.bt-pri:hover:not(:disabled) {
+  color: var(--color-sinal);
 }
 .bt-sec:hover:not(:disabled) {
   border-color: var(--color-sinal);
@@ -119,7 +163,10 @@ body {
   color: var(--color-grafite);
 }
 .bt-fantasma::before {
-  background: var(--color-nevoa);
+  background: var(--t-hover);
+}
+.bt-fantasma:hover:not(:disabled) {
+  color: var(--color-texto);
 }
 .bt-mini {
   height: 1.6rem;
@@ -133,7 +180,8 @@ body {
   width: 100%;
   border: 1px solid var(--color-linha);
   border-radius: var(--radius-campo);
-  background: #fff;
+  background: var(--color-superficie);
+  color: var(--color-texto);
   padding: 0.45rem 0.65rem;
   font-size: 0.875rem;
   transition:
@@ -141,17 +189,17 @@ body {
     box-shadow 0.2s;
 }
 .campo:hover {
-  border-color: #cfcfca;
+  border-color: var(--t-linha-forte);
 }
 .campo:focus {
   outline: none;
-  border-color: var(--color-preto);
+  border-color: var(--color-texto);
   box-shadow: 0 0 0 3px var(--color-sinal-claro);
 }
 
 /* ================= Painéis ================= */
 .painel {
-  background: #fff;
+  background: var(--color-superficie);
   border: 1px solid var(--color-linha);
   border-radius: var(--radius-painel);
 }
@@ -177,7 +225,7 @@ body {
   transition: transform 0.25s var(--ease-mola);
 }
 .linha-viva:hover {
-  background: #fafaf8;
+  background: var(--t-hover);
 }
 .linha-viva:hover > td:first-child::before {
   transform: scaleY(1);
@@ -221,7 +269,7 @@ body {
     0 3px 8px rgb(0 0 0 / 0.12);
 }
 .seletor-chip:focus-within {
-  outline: 2px solid var(--color-preto);
+  outline: 2px solid var(--color-texto);
   outline-offset: 2px;
 }
 .seletor-chip select {
@@ -264,7 +312,7 @@ body {
   transition: transform 0.2s var(--ease-mola);
 }
 .mapa > span.vazio {
-  background: var(--color-nevoa);
+  background: var(--t-hover);
   outline: 1px solid var(--color-linha);
   outline-offset: -1px;
 }
@@ -280,22 +328,23 @@ body {
   display: inline-flex;
   gap: 0.25rem;
   padding: 0.25rem;
-  border-radius: 12px;
+  border-radius: 999px;
   background: var(--color-nevoa);
 }
 .abas button {
   position: relative;
   z-index: 1;
   height: 2rem;
-  padding: 0 0.85rem;
-  border-radius: 9px;
-  font-size: 0.875rem;
-  font-weight: 550;
+  padding: 0 0.95rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 650;
+  font-stretch: 108%;
   color: var(--color-cinza);
   transition: color 0.2s;
 }
 .abas button:hover {
-  color: var(--color-preto);
+  color: var(--color-texto);
 }
 .abas button[aria-selected='true'] {
   color: var(--color-preto);
@@ -304,9 +353,9 @@ body {
   position: absolute;
   top: 0.25rem;
   bottom: 0.25rem;
-  border-radius: 9px;
-  background: #fff;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+  border-radius: 999px;
+  background: var(--color-sinal);
+  box-shadow: 0 4px 14px rgb(255 194 14 / 0.35);
   transition:
     left 0.35s var(--ease-mola),
     width 0.35s var(--ease-mola);
@@ -357,6 +406,7 @@ body {
 /* ================= Caminho Usina / Mês / Área ================= */
 .caminho select {
   appearance: none;
+  color: var(--color-texto);
   height: 2rem;
   padding: 0 0.6rem;
   border-radius: 8px;
@@ -366,7 +416,7 @@ body {
   transition: background-color 0.2s;
 }
 .caminho select:hover:not(:disabled) {
-  background: var(--color-nevoa);
+  background: var(--t-hover);
 }
 .caminho select:disabled {
   cursor: default;
@@ -387,7 +437,7 @@ body {
     padding-left 0.2s var(--ease-mola);
 }
 .menu-item:hover {
-  background: var(--color-nevoa);
+  background: var(--t-hover);
   padding-left: 0.9rem;
 }
 
@@ -405,7 +455,7 @@ body {
   width: 4px;
   height: 36px;
   border-radius: 99px;
-  background: #cfcfca;
+  background: var(--t-linha-forte);
   transform: translate(-50%, -50%);
   transition:
     background-color 0.2s,
@@ -433,12 +483,12 @@ body {
     transform 0.25s var(--ease-mola);
 }
 .anom-item:hover {
-  background: #fff;
+  background: var(--color-superficie);
   transform: translateX(3px);
 }
 .anom-item.ativo {
-  background: #fff;
-  border-color: var(--color-preto);
+  background: var(--color-superficie);
+  border-color: var(--color-texto);
   box-shadow: inset 3px 0 0 var(--color-sinal);
 }
 
@@ -447,7 +497,7 @@ body {
   transition: background-color 0.15s;
 }
 .cond-opcao:hover {
-  background: var(--color-nevoa);
+  background: var(--t-hover);
 }
 .cond-opcao:hover .chip {
   transform: scale(1.12);
@@ -458,12 +508,12 @@ body {
   transition: border-color 0.25s;
 }
 .eixo:focus-within {
-  border-color: var(--color-preto);
+  border-color: var(--color-texto);
 }
 
 /* área para soltar / colar imagens */
 .zona-solta {
-  border: 1.5px dashed #cfcfca;
+  border: 1.5px dashed var(--t-linha-forte);
   border-radius: 14px;
   padding: 1rem;
   text-align: center;
@@ -475,7 +525,7 @@ body {
 .zona-solta:hover,
 .zona-solta:focus {
   outline: none;
-  border-color: var(--color-preto);
+  border-color: var(--color-texto);
 }
 .zona-solta.ativa {
   border-color: var(--color-sinal);
@@ -493,6 +543,94 @@ body {
   animation: surgir 0.2s var(--ease-mola);
 }
 
+}
+
+/* ícone do tema gira ao trocar */
+@keyframes girar-entrada {
+  from {
+    opacity: 0;
+    transform: rotate(-90deg) scale(0.6);
+  }
+}
+.girar-entrada {
+  animation: girar-entrada 0.35s var(--ease-mola);
+}
+
+/* no escuro a prévia continua papel: só o fundo em volta escurece */
+:root[data-tema='escuro'] .previa .pagina {
+  box-shadow: 0 2px 18px rgb(0 0 0 / 0.6);
+}
+
+/* ================= Lapidação (referência FORGE) ================= */
+/* brilho amarelo no botão principal */
+.bt-pri {
+  box-shadow: 0 0 0 0 rgb(255 194 14 / 0);
+  transition:
+    color 0.25s var(--ease-mola),
+    box-shadow 0.35s var(--ease-mola),
+    transform 0.15s;
+}
+.bt-pri:hover:not(:disabled) {
+  box-shadow: 0 6px 22px rgb(255 194 14 / 0.45);
+}
+/* texto vazado e bloco de destaque (títulos da entrada) */
+.vazado {
+  color: transparent;
+  -webkit-text-stroke: 1.5px var(--color-sinal);
+}
+.bloco {
+  display: inline-block;
+  padding: 0 0.18em 0.04em;
+  background: var(--color-sinal);
+  color: var(--color-preto);
+  transform: skewX(-6deg);
+}
+.bloco > span {
+  display: inline-block;
+  transform: skewX(6deg);
+}
+/* faixas diagonais do painel preto */
+.faixas::before,
+.faixas::after {
+  content: '';
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  width: 34px;
+  transform: skewX(-24deg);
+  pointer-events: none;
+}
+.faixas::before {
+  right: 14%;
+  background: linear-gradient(to bottom, transparent, rgb(255 194 14 / 0.55), transparent);
+}
+.faixas::after {
+  right: 6%;
+  width: 14px;
+  background: linear-gradient(to bottom, transparent, rgb(255 194 14 / 0.25), transparent);
+}
+/* números da faixa: mais pesados */
+.numero .titulo-grande {
+  font-weight: 800;
+}
+.numero {
+  position: relative;
+  overflow: hidden;
+}
+.numero::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--color-sinal);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.4s var(--ease-mola);
+}
+.numero:hover::after {
+  transform: scaleX(1);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -515,6 +653,8 @@ body {
 
 .pagina {
   box-sizing: border-box;
+  color: #000; /* documento: sempre texto preto, em qualquer tema */
+  color-scheme: light;
   width: 210mm;
   min-height: 297mm;
   padding: 12mm 14mm 12mm 12mm;

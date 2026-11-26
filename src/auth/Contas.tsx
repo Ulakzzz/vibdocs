@@ -17,7 +17,7 @@ import {
 function Janela({ titulo, fechar, children }: { titulo: string; fechar: () => void; children: ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-6 backdrop-blur-[2px]" onMouseDown={fechar}>
-      <div className="surgir max-h-full w-full max-w-2xl overflow-auto rounded-[18px] bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="surgir max-h-full w-full max-w-2xl overflow-auto rounded-[18px] border border-linha bg-elevada shadow-[var(--t-sombra)]" onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-linha px-5 py-3">
           <h2 className="titulo text-lg">{titulo}</h2>
           <button className={btnMini} onClick={fechar}>

@@ -34,7 +34,10 @@ import {
   colunasQuadro,
   condicaoNoMes,
   dataPorExtenso,
+  localizacaoPadrao,
   reincidenciaFinal,
+  rotulosUsina,
+  VAZIO,
   equipamentosAnomalia,
   equipamentosQuadro,
   juntar,
@@ -167,6 +170,32 @@ function rodape(r: Relatorio) {
   })
 }
 
+/** Tabela "CONDIÇÃO DO EQUIPAMENTO" (número × condição), igual à dos relatórios emitidos. */
+function legendaCondicoes(): Table {
+  const esq = ['1', '2', '3', '4', '5', '6', '7']
+  const dir = ['8', '9', '10', '11', '12', '13', 'X']
+  const lNum = 560
+  const lNome = Math.round((UTIL - 2 * lNum) / 2)
+  const par = (c: string) => {
+    const k = CONDICOES[c]
+    return [
+      celula([p([t(c, { bold: true, size: 15, color: hex(k.texto) })], { align: AlignmentType.CENTER, depois: 0 })], { largura: lNum, fundo: k.cor }),
+      celula([p([t(k.nome.toUpperCase(), { size: 15 })], { depois: 0 })], { largura: lNome }),
+    ]
+  }
+  return new Table({
+    width: { size: UTIL, type: WidthType.DXA },
+    columnWidths: [lNum, lNome, lNum, lNome],
+    borders: comBordas,
+    rows: [
+      new TableRow({
+        children: [celula([p([t('CONDIÇÃO DO EQUIPAMENTO', { bold: true, size: 18 })], { align: AlignmentType.CENTER, depois: 0 })], { colunas: 4, largura: UTIL })],
+      }),
+      ...esq.map((c, i) => new TableRow({ cantSplit: true, children: [...par(c), ...par(dir[i])] })),
+    ],
+  })
+}
+
 function quadro(r: Relatorio): (Paragraph | Table)[] {
   const eqs = equipamentosQuadro(r)
   if (!eqs.length) return [p([t('Nenhum equipamento com as condições selecionadas.', { color: '777777' })])]
@@ -225,13 +254,13 @@ async function paginaAnomalia(r: Relatorio, local: string): Promise<(Paragraph |
     ],
   })
 
+  const rot = rotulosUsina(r.usina)
   const info = [
-    ['Localização', r.areaTitulo || r.sigla],
+    ['Localização', a.localizacao || localizacaoPadrao(r, e)],
     ['Equipamento', a.equipamento || e.descricao],
-    ['Local de instalação', e.local],
-    ['Data', a.dataMedicao || '—'],
-    ['Reincidente desde', reincidenciaFinal(r, e, a) || '—'],
-    ['Notas PR', a.notasPR || '—'],
+    [rot.data, a.dataMedicao || VAZIO],
+    ['Reincidente desde', reincidenciaFinal(r, e, a) || VAZIO],
+    ['Nota PR', a.notasPR || VAZIO],
   ].map(([k, v]) => p([t(`${k}: ${v}`, { bold: true, size: 20 })], { depois: 30 }))
 
   const severidades = new Table({
@@ -239,7 +268,7 @@ async function paginaAnomalia(r: Relatorio, local: string): Promise<(Paragraph |
     columnWidths: [400, 1300],
     borders: semBordas,
     rows: (['Alarme', 'Alerta', 'Pré-alerta'] as const).map(
-      (s) =>
+      (s, i) =>
         new TableRow({
           children: [
             new TableCell({
@@ -248,7 +277,7 @@ async function paginaAnomalia(r: Relatorio, local: string): Promise<(Paragraph |
               shading: { type: ShadingType.CLEAR, color: 'auto', fill: sev === s ? hex(corSev(s)) : 'FFFFFF' },
               borders: { top: BORDA, bottom: BORDA, left: BORDA, right: BORDA },
             }),
-            celula([p([t(s, { bold: true, size: 18 })], { depois: 0 })], { centro: true }),
+            celula([p([t(rot.severidades[i], { bold: true, size: 18 })], { depois: 0 })], { centro: true }),
           ],
         }),
     ),
@@ -372,6 +401,8 @@ export async function gerarWord(r: Relatorio): Promise<Blob> {
 
   const condicao: (Paragraph | Table)[] = [
     p([t('1. Condição dos equipamentos da rota', { bold: true, size: 24 })], { quebra: true, depois: 160 }),
+    legendaCondicoes(),
+    p('', { depois: 120 }),
     ...quadro(r),
     p([t('Equipe técnica', { bold: true, size: 24 })], { antes: 360, depois: 100 }),
     p(`Técnico responsável pela coleta de dados: ${r.equipe.coleta || '—'}`, { depois: 40 }),

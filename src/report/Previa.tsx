@@ -11,7 +11,10 @@ import {
   colunasQuadro,
   condicaoNoMes,
   dataPorExtenso,
+  localizacaoPadrao,
   reincidenciaFinal,
+  rotulosUsina,
+  VAZIO,
   equipamentosAnomalia,
   equipamentosQuadro,
   juntar,
@@ -95,6 +98,45 @@ function PaginaIndicadores({ r }: { r: Relatorio }) {
 }
 
 /** editarImagens: só na prévia da tela — permite arrastar/redimensionar imagens no layout livre. */
+/** Tabela que relaciona o número com a condição do equipamento (como nos relatórios emitidos). */
+const NIVEIS = ['Alarme', 'Alerta', 'Pré-alerta'] as const
+
+export const LEGENDA_ESQ = ['1', '2', '3', '4', '5', '6', '7']
+export const LEGENDA_DIR = ['8', '9', '10', '11', '12', '13', 'X']
+
+function LegendaCondicoes() {
+  const celulas = (c: string) => {
+    const k = CONDICOES[c]
+    return (
+      <>
+        <td className="w-10 border border-black text-center font-bold" style={{ background: k.cor, color: k.texto }}>
+          {c}
+        </td>
+        <td className="border border-black px-1">{k.nome.toUpperCase()}</td>
+      </>
+    )
+  }
+  return (
+    <table className="mb-3 w-full border-collapse text-[8.5px]">
+      <thead>
+        <tr>
+          <th colSpan={4} className="border border-black py-0.5 text-[10px] font-bold">
+            CONDIÇÃO DO EQUIPAMENTO
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {LEGENDA_ESQ.map((c, i) => (
+          <tr key={c}>
+            {celulas(c)}
+            {celulas(LEGENDA_DIR[i])}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
 export function Previa({ r, editarImagens }: { r: Relatorio; editarImagens?: (local: string, imagens: ImagemRef[]) => void }) {
   const quadro = equipamentosQuadro(r)
   const anomalias = equipamentosAnomalia(r)
@@ -122,6 +164,7 @@ export function Previa({ r, editarImagens }: { r: Relatorio; editarImagens?: (lo
       <section className="pagina">
         <Cabecalho />
         <h2 className="mt-4 mb-2 text-sm font-bold">1. Condição dos equipamentos da rota</h2>
+        <LegendaCondicoes />
         {quadro.length ? (
           <table className="w-full border-collapse text-[9px]">
             <thead>
@@ -171,6 +214,7 @@ export function Previa({ r, editarImagens }: { r: Relatorio; editarImagens?: (lo
       {anomalias.map((e) => {
         const a = anomaliaDe(r, e)
         const sev = severidade(e.condicao)
+        const rot = rotulosUsina(r.usina)
         const cor = (s: string) => (s === 'Alarme' ? '#ff0000' : s === 'Alerta' ? '#ffc000' : '#ffff00')
         return (
           <section className="pagina" key={e.local} data-local={e.local}>
@@ -180,19 +224,20 @@ export function Previa({ r, editarImagens }: { r: Relatorio; editarImagens?: (lo
             </div>
             <div className="mt-2 flex justify-between text-[11px] font-bold">
               <div className="space-y-0.5">
-                <div>Localização: {r.areaTitulo || r.sigla}</div>
+                <div>Localização: {a.localizacao || localizacaoPadrao(r, e)}</div>
                 <div>Equipamento: {a.equipamento || e.descricao}</div>
-                <div>Local de instalação: {e.local}</div>
-                <div>Data: {a.dataMedicao || '—'}</div>
-                <div>Reincidente desde: {reincidenciaFinal(r, e, a) || '—'}</div>
-                <div>Notas PR: {a.notasPR || '—'}</div>
+                <div>
+                  {rot.data}: {a.dataMedicao || VAZIO}
+                </div>
+                <div>Reincidente desde: {reincidenciaFinal(r, e, a) || VAZIO}</div>
+                <div>Nota PR: {a.notasPR || VAZIO}</div>
               </div>
               <table className="h-fit text-[10px]">
                 <tbody>
-                  {(['Alarme', 'Alerta', 'Pré-alerta'] as const).map((s) => (
+                  {rot.severidades.map((s, i) => (
                     <tr key={s}>
-                      <td className="h-5 w-6 border border-black" style={{ background: sev === s ? cor(s) : '#fff' }} />
-                      <td className="pl-1">{s}</td>
+                      <td className="h-5 w-6 border border-black" style={{ background: sev === NIVEIS[i] ? cor(NIVEIS[i]) : '#fff' }} />
+                      <td className="pl-1 font-bold">{s}</td>
                     </tr>
                   ))}
                 </tbody>

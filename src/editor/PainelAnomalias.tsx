@@ -6,7 +6,10 @@ import { guardarImagem, urlImagem } from '../lib/imagens'
 import {
   anomaliaDe,
   equipamentosAnomalia,
+  localizacaoPadrao,
   novoEixo,
+  rotulosUsina,
+  PARTES,
   reincidenciaAuto,
   SLOTS,
   type Anomalia,
@@ -90,10 +93,13 @@ function EditorAnomalia({ r, e, atualizar }: { r: Relatorio; e: EquipRel; atuali
       </div>
 
       <div className="grid grid-cols-2 gap-3">
+        <Campo rotulo="Localização" dica={r.usina === 'Jeceaba' ? 'Automático: Local de instalação.' : 'Automático: nome da área.'}>
+          <Texto valor={a.localizacao ?? ''} placeholder={localizacaoPadrao(r, e)} mudar={(v) => mudar((an) => ({ ...an, localizacao: v }))} />
+        </Campo>
         <Campo rotulo="Equipamento (como aparece no relatório)">
           <Texto valor={a.equipamento} mudar={(v) => mudar((an) => ({ ...an, equipamento: v }))} />
         </Campo>
-        <Campo rotulo="Data da medição">
+        <Campo rotulo={rotulosUsina(r.usina).data}>
           <Texto valor={a.dataMedicao} placeholder="dd/mm/aa" mudar={(v) => mudar((an) => ({ ...an, dataMedicao: v }))} />
         </Campo>
         <Campo
@@ -112,16 +118,21 @@ function EditorAnomalia({ r, e, atualizar }: { r: Relatorio; e: EquipRel; atuali
             mudar={(v) => mudar((an) => ({ ...an, reincidenteDesde: v }))}
           />
         </Campo>
-        <Campo rotulo="Notas PR">
+        <Campo rotulo="Nota PR" dica="Várias notas: separe com /">
           <Texto valor={a.notasPR} mudar={(v) => mudar((an) => ({ ...an, notasPR: v }))} />
         </Campo>
       </div>
 
       <section>
         <div className="mb-1 flex items-center justify-between">
-          <h3 className="titulo text-base">Situação e recomendação por eixo</h3>
+          <h3 className="titulo text-base">Situação e recomendação</h3>
+          <datalist id="partes-sugeridas">
+            {PARTES.map((p) => (
+              <option key={p} value={p} />
+            ))}
+          </datalist>
           <button className={btnMini} onClick={() => mudar((an) => ({ ...an, eixos: [...an.eixos, novoEixo(an.eixos.length + 1)] }))}>
-            + eixo
+            Adicionar parte
           </button>
         </div>
         <p className="mb-2 text-[11px] text-cinza">
@@ -133,6 +144,8 @@ function EditorAnomalia({ r, e, atualizar }: { r: Relatorio; e: EquipRel; atuali
               <div className="mb-2 flex items-center gap-2">
                 <input
                   className="campo titulo w-32 text-sm"
+                  list="partes-sugeridas"
+                  aria-label="Parte do equipamento"
                   value={x.nome}
                   onChange={(ev) => mudarEixo(x.id, (y) => ({ ...y, nome: ev.target.value }))}
                 />
@@ -172,7 +185,7 @@ function EditorAnomalia({ r, e, atualizar }: { r: Relatorio; e: EquipRel; atuali
                 </button>
                 <button
                   className={btnMini}
-                  title="Remover eixo"
+                  title="Remover parte"
                   disabled={a.eixos.length === 1}
                   onClick={() => mudar((an) => ({ ...an, eixos: an.eixos.filter((y) => y.id !== x.id) }))}
                 >

@@ -16,7 +16,7 @@ export interface EquipRel {
 
 export interface Eixo {
   id: string
-  nome: string // "Eixo 01", "Motor LA", ...
+  nome: string // parte do equipamento: "Motor", "Bomba", "Mancais"...
   falha: string // id do texto padrão escolhido ('' = nenhum)
   situacaoPadrao: string
   recomendacaoPadrao: string
@@ -61,6 +61,8 @@ export function posicaoLivre(img: ImagemRef, todas: ImagemRef[]) {
 }
 
 export interface Anomalia {
+  /** vazio = automático (ver localizacaoPadrao) */
+  localizacao?: string
   equipamento: string
   dataMedicao: string
   reincidenteDesde: string
@@ -137,10 +139,14 @@ export const hojeISO = () => {
 
 export const novoId = () => Math.random().toString(36).slice(2, 10)
 
+/** Partes mais comuns nos relatórios (sugestões do campo; o técnico pode escrever qualquer nome). */
+export const PARTES = ['Motor', 'Bomba', 'Mancais', 'Mancais da bomba', 'Redutor', 'Ventilador', 'Exaustor', 'Compressor', 'Acoplamento']
+
+/** Nova parte do equipamento (Motor, Bomba…). "Eixo" no código é só o nome antigo da estrutura. */
 export function novoEixo(n: number, id = novoId()): Eixo {
   return {
     id,
-    nome: `Eixo ${String(n).padStart(2, '0')}`,
+    nome: PARTES[n - 1] ?? `Parte ${n}`,
     falha: '',
     situacaoPadrao: '',
     recomendacaoPadrao: '',
@@ -258,3 +264,18 @@ export const reincidenciaFinal = (r: Relatorio, e: EquipRel, a: Anomalia) => a.r
 export function normalizar(r: Relatorio): Relatorio {
   return r.codigoManual ? r : { ...r, codigo: gerarCodigo(r.usina, r.sigla, r.mesReferencia, r.sequencia) }
 }
+
+// ---------- rótulos que mudam por usina (conforme os relatórios emitidos) ----------
+export function rotulosUsina(usina: string) {
+  const min = usina === 'Mineração'
+  return {
+    data: min ? 'Data' : 'Data da coleta',
+    severidades: ['Alarme', 'Alerta', min ? 'Monitoramento' : 'Pré-Alerta'] as const,
+  }
+}
+
+/** Localização padrão da página de anomalia: em Jeceaba é o Local de instalação; nas demais, o nome da área. */
+export const localizacaoPadrao = (r: Relatorio, e: EquipRel) => (r.usina === 'Jeceaba' ? e.local : r.areaTitulo || r.sigla)
+
+/** Texto que os relatórios usam quando o campo não se aplica. */
+export const VAZIO = '**'

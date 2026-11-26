@@ -14,7 +14,7 @@ await pagina.getByRole('tab', { name: /^Anomalias/ }).click()
 // Eixo 01: texto padrão + observação do técnico
 await pagina.locator('select').filter({ hasText: 'falha / texto padrão' }).first().selectOption('folga-rotativa')
 await pagina.getByPlaceholder('Texto livre').first().fill('Lado direito sentido fluxo (texto de teste).')
-await pagina.getByRole('button', { name: '+ eixo' }).click()
+await pagina.getByRole('button', { name: 'Adicionar parte' }).click()
 await pagina.locator('select').filter({ hasText: 'falha / texto padrão' }).nth(1).selectOption('normal')
 
 // Duas imagens fictícias: tendência (larga) e foto (alta, para testar o ajuste)
