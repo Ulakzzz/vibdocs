@@ -41,7 +41,9 @@ import { escolherPasta, esquecerPasta, navegadorSuportado, pastaLembrada, recone
 import { guardarModelo, obterModelo, visualDoModelo, type VisualModelo } from './lib/modelo'
 import { rascunhosRecentes } from './lib/rascunho'
 import { lerDaPasta, lerLocal, maisRecente, proximaSequencia, salvarEmitido, salvarLocal, salvarNaPasta } from './lib/rascunho'
-import { anomaliaDe, aplicarHistorico, artDaUsina, paginaPreenchida, type PerfilTecnico, equipamentosAnomalia, hojeISO, mesmoHistorico, normalizar, novoRelatorio, type EquipRel, type ImagemRef, type Relatorio } from './lib/relatorio'
+import { anomaliaDe, aplicarHistorico, artDaUsina, paginaPreenchida, type PerfilTecnico, equipamentosAnomalia, hojeISO, mesmoHistorico, normalizar, novoRelatorio, STATUS_RELATORIO, type StatusRelatorio, type EquipRel, type ImagemRef, type Relatorio, type Slot } from './lib/relatorio'
+import { guardarImagem } from './lib/imagens'
+import { gravarLembretes } from './lib/lembretesArquivo'
 import { AjustarLargura, Previa } from './report/Previa'
 import { Inicio } from './inicio/Inicio'
 import { HistoricoPreditivo } from './historico/HistoricoPreditivo'
@@ -270,7 +272,11 @@ export default function App() {
       setEstado('salvando')
       try {
         await salvarLocal(r)
-        if (raiz) await salvarNaPasta(raiz, r)
+        if (raiz) {
+          await salvarNaPasta(raiz, r)
+          // lembretes do relatório para o Power Automate (VibDocs/lembretes); falha aqui não impede o salvamento
+          await gravarLembretes(raiz, r).catch((e) => console.warn('lembretes', e))
+        }
         sujo.current = false
         setEstado('salvo')
         setSalvoEm(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
@@ -592,6 +598,32 @@ export default function App() {
     }
   }, [])
 
+  // gráfico enviado pela página do banco: entra no quadro certo da página de anomalia da TAG
+  useEffect(() => {
+    const chegou = (ev: Event) => {
+      const { tag, blob, slot, nome } = (ev as CustomEvent<{ tag: string; blob: Blob; slot: Slot; nome: string }>).detail
+      const r = relAtual.current
+      const eq = r?.equipamentos.find((e) => e.local === tag)
+      if (!r || !eq) return avisar(`Abra o relatório da área de ${tag} para receber o gráfico.`, 'erro')
+      void guardarImagem(blob).then((id) => {
+        atualizar((x) => {
+          const a = anomaliaDe(x, eq)
+          return { ...x, anomalias: { ...x.anomalias, [tag]: { ...a, imagens: [...a.imagens, { id, slot, nome, ajuste: 'conter' }] } } }
+        })
+        avisar(`Gráfico colocado na página de ${tag} (quadro ${slot === 'tendencia' ? 'Tendência' : 'Espectro'}).`, 'ok', {
+          rotulo: 'Ver',
+          fazer: () => {
+            setTela('relatorio')
+            setAba('anomalias')
+            setAnomaliaSel(tag)
+          },
+        })
+      })
+    }
+    addEventListener('vibdocs:imagem-banco', chegou)
+    return () => removeEventListener('vibdocs:imagem-banco', chegou)
+  }, [atualizar])
+
   const editarImagens = useCallback(
     (local: string, imagens: ImagemRef[]) =>
       atualizar((x) => {
@@ -621,7 +653,11 @@ export default function App() {
   }, [raiz, usinaRel, versaoModelo])
   // Exportar PDF com o botão de progresso: a borda se completa, abre a impressão e mostra "pronto"
   const [pdf, setPdf] = useState<'' | 'preparando' | 'pronto'>('')
+  // exportar marca o relatório como emitido (o técnico pode voltar o andamento no seletor)
+  const marcarEmitido = () =>
+    relAtual.current?.status !== 'emitido' && papelRef.current !== 'leitor' && atualizar((x) => ({ ...x, status: 'emitido', emitidoEm: new Date().toISOString() }))
   const exportarPdf = () => {
+    marcarEmitido()
     setPdf('preparando')
     setTimeout(() => {
       window.print()
@@ -648,6 +684,7 @@ export default function App() {
         const blob = modelo ? await (await import('./lib/modeloWord')).gerarWordDoModelo(rel, modelo.dados) : await gerarWord(rel)
         const nome = nomeArquivo(rel, 'docx')
         baixar(blob, nome)
+        marcarEmitido()
         if (raiz) setAviso(`Word salvo também no SharePoint: ${await salvarEmitido(raiz, rel, nome, blob)}`)
       } finally {
         setGerandoWord(false)
@@ -1124,6 +1161,14 @@ export default function App() {
                         {rel.codigo}
                       </span>
                       <Copiar texto={rel.codigo} rotulo="código do relatório" />
+                      <Seletor
+                        classe="seletor-status"
+                        rotulo="Andamento do relatório"
+                        valor={rel.status ?? 'rascunho'}
+                        estiloBotao={{ ['--c' as string]: STATUS_RELATORIO[rel.status ?? 'rascunho'].cor }}
+                        mudar={(v) => atualizar((x) => ({ ...x, status: v as StatusRelatorio, emitidoEm: v === 'emitido' ? (x.emitidoEm ?? new Date().toISOString()) : x.emitidoEm }))}
+                        opcoes={(Object.keys(STATUS_RELATORIO) as StatusRelatorio[]).map((k) => ({ valor: k, rotulo: STATUS_RELATORIO[k].nome, cor: STATUS_RELATORIO[k].cor }))}
+                      />
                     </div>
                     <div className="min-h-0 flex-1 overflow-auto">
                       {aba === 'relatorio' && <PainelRelatorio r={rel} atualizar={atualizar} tecnicos={tecnicos} raiz={raiz} />}

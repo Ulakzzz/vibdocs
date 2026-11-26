@@ -8,7 +8,7 @@ import { useConfig } from '../lib/config'
 import type { CriteriosGut } from '../lib/gutCriterios'
 import { mesCurto } from '../lib/historico'
 import { rascunhosDaPasta, rascunhosRecentes } from '../lib/rascunho'
-import { equipamentosAnomalia, juntar, USINAS_RELATORIO, type Relatorio } from '../lib/relatorio'
+import { equipamentosAnomalia, juntar, STATUS_RELATORIO, USINAS_RELATORIO, type Relatorio } from '../lib/relatorio'
 import { btn, btnPri } from '../editor/campos'
 import { Carregando } from '../ui/Contador'
 import { Seletor } from '../ui/Seletor'
@@ -206,7 +206,12 @@ export function BuscaRelatorios({ raiz, abrir }: { raiz?: FileSystemDirectoryHan
                 <li key={`${r.usina}|${r.mesReferencia}|${r.sigla}|${r.codigo}`}>
                   <button className="rel-cartao" onClick={() => abrir(r)}>
                     <span className="flex items-baseline justify-between gap-2">
-                      <b className="tag">{r.codigo}</b>
+                      <b className="tag">
+                        {r.codigo}
+                        <span className="status-pilula" style={{ ['--c' as string]: STATUS_RELATORIO[r.status ?? 'rascunho'].cor }}>
+                          {STATUS_RELATORIO[r.status ?? 'rascunho'].nome}
+                        </span>
+                      </b>
                       <small className="text-cinza">{dataBr(r.dataExpedicao)}</small>
                     </span>
                     <span className="mt-1 block">

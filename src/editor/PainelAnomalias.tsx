@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { PainelGut } from './PainelGut'
 import { SeletorCondicao } from './PainelEquipamentos'
+import { ultimaColetaDoBanco } from '../banco/BancoVibracao'
 import { Seletor } from '../ui/Seletor'
 import { CONDICOES } from '../lib/condicao'
 import { mesCurto } from '../lib/historico'
@@ -58,7 +59,13 @@ export function PainelAnomalias({
       const f = x.foraDaAnalise ?? []
       return { ...x, foraDaAnalise: f.includes(local) ? f.filter((l) => l !== local) : [...f, local] }
     })
+  // a lista se reordena pela gravidade: fixa o equipamento aberto para ele não "pular" quando a condição muda
+  useEffect(() => {
+    if (atual && selecionado !== atual.local) selecionar(atual.local)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [atual?.local])
   const mudarCondicao = (e: EquipRel, c: string) => {
+    selecionar(e.local)
     atualizar((x) => ({ ...x, equipamentos: x.equipamentos.map((q) => (q.local === e.local ? { ...q, condicao: c } : q)) }))
     aoMudarCondicao?.(e, c)
   }
@@ -204,6 +211,18 @@ function EditorAnomalia({ r, e, atualizar, mudarCondicao }: { r: Relatorio; e: E
         </Campo>
         <Campo rotulo={rotulosUsina(r.usina).data}>
           <Texto valor={a.dataMedicao} placeholder="dd/mm/aa" mudar={(v) => mudar((an) => ({ ...an, dataMedicao: v }))} />
+          {!a.dataMedicao &&
+            (() => {
+              const d = ultimaColetaDoBanco(e.local)
+              const txt = d?.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+              return (
+                d && (
+                  <button type="button" className="mt-1 text-xs underline decoration-sinal decoration-2 underline-offset-2" onClick={() => mudar((an) => ({ ...an, dataMedicao: txt! }))}>
+                    Usar a última medição do banco: {txt}
+                  </button>
+                )
+              )
+            })()}
         </Campo>
         <Campo
           rotulo="Reincidente desde"

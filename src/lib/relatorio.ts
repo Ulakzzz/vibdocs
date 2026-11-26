@@ -17,6 +17,13 @@ export interface PerfilTecnico {
   selo?: string
 }
 
+export type StatusRelatorio = 'rascunho' | 'revisao' | 'emitido'
+export const STATUS_RELATORIO: Record<StatusRelatorio, { nome: string; cor: string }> = {
+  rascunho: { nome: 'Rascunho', cor: '#9ca3af' },
+  revisao: { nome: 'Em revisão', cor: '#38bdf8' },
+  emitido: { nome: 'Emitido', cor: '#a3e635' },
+}
+
 export const USINAS_RELATORIO = ['Barreiro', 'Jeceaba', 'Mineração', 'Florestal'] as const
 
 export interface EquipRel {
@@ -138,6 +145,9 @@ export interface Relatorio {
   mesesNoQuadro?: number
   /** Cópia do histórico só dos equipamentos deste relatório (meses anteriores ao de referência). */
   historico?: { condicoes: Historico; execucao?: Execucao; fonte: string; atualizadoEm: string }
+  /** Andamento: rascunho → em revisão → emitido (emitido é marcado sozinho ao exportar) */
+  status?: StatusRelatorio
+  emitidoEm?: string
   /** Equipamentos "a analisar" que o técnico tirou da lista de anomalias */
   foraDaAnalise?: string[]
   /** Seções "Resumo" e "Definição da atividade" (textos padrão em Cadastros, ajustáveis por relatório) */

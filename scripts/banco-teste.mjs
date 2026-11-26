@@ -53,6 +53,11 @@ await pg.locator('.banco-escolha .linha-recente', { hasText: 'VM52-DEMO-AAA-010'
 await pg.locator('.banco-tag', { hasText: 'VM52-DEMO-AAA-010' }).waitFor()
 await foto(5)
 
+// o gráfico de tendência vai para a página da TAG no relatório aberto
+await pg.getByRole('button', { name: 'Enviar ao relatório' }).first().click()
+await pg.getByText(/Gráfico colocado na página de VM52-DEMO-AAA-010/).waitFor({ timeout: 15000 })
+await foto(3)
+
 // volta pelo equipamento: Início → relatório → Equipamentos → botão Banco
 await pg.getByRole('button', { name: 'Início' }).click()
 await pg.locator('.cartao-usina').first().click()

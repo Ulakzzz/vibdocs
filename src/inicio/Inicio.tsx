@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { mesesDisponiveis, USINAS, type Usina } from '../lib/controle'
 import { lembretes } from '../lib/gut'
+import { arquivoIcs, lembretesDoRelatorio } from '../lib/lembretesArquivo'
 import { mesCurto } from '../lib/historico'
 import { rascunhosRecentes, resumoUsina } from '../lib/rascunho'
-import { equipamentosAnomalia, hojeISO, type Relatorio } from '../lib/relatorio'
+import { equipamentosAnomalia, hojeISO, STATUS_RELATORIO, type Relatorio, type StatusRelatorio } from '../lib/relatorio'
 import { btnFantasma } from '../editor/campos'
 import { Contador } from '../ui/Contador'
 import { Ondas } from '../ui/Ondas'
@@ -166,6 +167,7 @@ export function Inicio(p: {
   }, [p.raiz, mesRef])
 
   const lista = recentes ?? []
+  const lista2 = lista
   const avisos: Lembrete[] = lista
     .flatMap((r) =>
       equipamentosAnomalia(r).flatMap((e) => {
@@ -257,7 +259,25 @@ export function Inicio(p: {
         <section className="cartao-inicio">
           <div className="flex items-baseline justify-between">
             <h2 className="titulo text-lg">Lembretes</h2>
-            <span className="text-xs text-cinza">pelo GUT e pelos alarmes</span>
+            <span className="flex items-center gap-3 text-xs text-cinza">
+              pelo GUT e pelos alarmes
+              {avisos.length > 0 && (
+                <button
+                  className="bt bt-sec bt-mini"
+                  title="Baixa um arquivo .ics: abra no Outlook para os lembretes irem para o seu calendário (com aviso na véspera)"
+                  onClick={() => {
+                    const lista = [...new Map(lista2.flatMap((r) => lembretesDoRelatorio(r)).map((l) => [`${l.codigo}|${l.tag}|${l.tipo}`, l])).values()]
+                    const a = document.createElement('a')
+                    a.href = URL.createObjectURL(arquivoIcs(lista))
+                    a.download = 'Lembretes VibDocs.ics'
+                    a.click()
+                    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+                  }}
+                >
+                  Adicionar ao Outlook (.ics)
+                </button>
+              )}
+            </span>
           </div>
           {avisos.length === 0 ? (
             <p className="mt-4 text-sm text-cinza">
@@ -285,6 +305,39 @@ export function Inicio(p: {
           )}
         </section>
         <Calendario recentes={lista} avisos={avisos} />
+      </Revelar>
+
+      {/* Andamento dos relatórios do mês (quadro) */}
+      <Revelar className="mt-6">
+        <section className="cartao-inicio">
+          <div className="flex items-baseline justify-between">
+            <h2 className="titulo text-lg">Relatórios do mês</h2>
+            <span className="text-xs text-cinza">por andamento</span>
+          </div>
+          <div className="quadro-status mt-3">
+            {(Object.keys(STATUS_RELATORIO) as StatusRelatorio[]).map((s) => {
+              const doStatus = doMes.filter((r) => (r.status ?? 'rascunho') === s)
+              return (
+                <div key={s} className="coluna-status">
+                  <h3>
+                    <i style={{ background: STATUS_RELATORIO[s].cor }} />
+                    {STATUS_RELATORIO[s].nome} <small>{doStatus.length}</small>
+                  </h3>
+                  {doStatus.map((r) => (
+                    <button key={`${r.usina}${r.sigla}${r.codigo}`} className="cartao-status" onClick={() => p.continuar(r)}>
+                      <b>{r.areaTitulo || r.sigla}</b>
+                      <small>
+                        {r.usina} · {r.codigo}
+                      </small>
+                      <small>{equipamentosAnomalia(r).length} anomalia(s)</small>
+                    </button>
+                  ))}
+                  {!doStatus.length && <p className="text-xs text-cinza">nenhum</p>}
+                </div>
+              )
+            })}
+          </div>
+        </section>
       </Revelar>
 
       {/* Continuar */}
@@ -339,9 +392,20 @@ export function Inicio(p: {
               <h3>Avisos no celular</h3>
               <p>
                 Lembrar quem fez o relatório de <b>enviá-lo</b> (alarme tem prazo curto desde a identificação) e de fazer uma{' '}
-                <b>nova análise</b> na data que o GUT indica (7, 15, 30 ou 60 dias). Caminho previsto: fluxo diário do Power Automate
-                lendo os lembretes no SharePoint e avisando no Teams (notificação no celular).
+                <b>nova análise</b> na data que o GUT indica (7, 15, 30 ou 60 dias). O VibDocs já grava os lembretes de cada relatório em{' '}
+                <b>VibDocs/lembretes</b> (um arquivo por relatório); falta só o fluxo do Power Automate que lê a pasta todo dia e avisa no
+                Teams.
               </p>
+              <details className="text-xs">
+                <summary className="cursor-pointer font-semibold">Como montar o fluxo (Power Automate)</summary>
+                <ol className="mt-2 list-decimal space-y-1 pl-4">
+                  <li>Fluxo de nuvem agendado: todo dia às 7h.</li>
+                  <li>SharePoint “Listar pastas” em VibDocs/lembretes e “Obter conteúdo do arquivo” de cada .json.</li>
+                  <li>“Analisar JSON” (campo lembretes: codigo, tag, tipo, quando, texto, responsavel, email).</li>
+                  <li>Filtrar os itens com quando = hoje (ou até 2 dias antes).</li>
+                  <li>Teams “Publicar mensagem em um chat” para o email do responsável: chega como notificação no celular.</li>
+                </ol>
+              </details>
               <Interruptor rotulo="Avisar no celular" />
             </article>
             <article className="ideia">

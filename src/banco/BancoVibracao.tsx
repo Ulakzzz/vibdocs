@@ -1,6 +1,7 @@
 // Página "Banco de vibração": abre os bancos Omnitrend da pasta do SharePoint, mostra a árvore de máquinas,
 // tendência dos globais com alarmes, espectros, e liga cada máquina a uma TAG da planilha (vínculo permanente).
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { enviarAoRelatorio, graficoParaImagem } from './exportarGrafico'
 import type { LinhaControle } from '../lib/controle'
 import { BancoAberto, listarBancos, PASTA_BANCOS, type ArquivoBanco } from '../lib/omnitrend/cliente'
 import type { Espectro, NoOT, TarefaOT } from '../lib/omnitrend/ler'
@@ -13,6 +14,17 @@ import { CORES, EspectroGrafico, Tendencia } from './Graficos'
 
 // banco aberto fica na memória enquanto o site estiver aberto (trocar de tela não relê o arquivo)
 let abertoGlobal: { chave: string; banco: BancoAberto } | undefined
+let vinculosGlobal: Vinculos = {}
+
+/** Data da última medição da máquina vinculada à TAG (se o banco dela estiver aberto nesta sessão). */
+export function ultimaColetaDoBanco(tag: string): Date | undefined {
+  const v = vinculosGlobal[tag]
+  const b = abertoGlobal
+  if (!v || !b || b.chave !== v.banco) return undefined
+  let ultima = 0
+  for (const c of b.banco.estrutura(v.no)) for (const p of c.pontos) for (const t of p.tarefas) ultima = Math.max(ultima, t.ultima?.t ?? 0)
+  return ultima ? new Date(ultima * 1000) : undefined
+}
 
 const data = (t?: number) => (t ? new Date(t * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '–')
 const tam = (b: number) => (b > 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.round(b / 1e6)} MB`)
@@ -48,7 +60,11 @@ export function BancoVibracao({
   const [chave, setChave] = useState(abertoGlobal?.chave ?? '')
   const [abrindo, setAbrindo] = useState('')
   const [erro, setErro] = useState('')
-  const [vinculos, setVinculos] = useState<Vinculos>({})
+  const [vinculos, setVinculosEstado] = useState<Vinculos>({})
+  const setVinculos = (v: Vinculos) => {
+    vinculosGlobal = v
+    setVinculosEstado(v)
+  }
   const [vinculosLidos, setVinculosLidos] = useState(false)
   const [maquina, setMaquina] = useState<number>()
   const [busca, setBusca] = useState('')
@@ -56,6 +72,7 @@ export function BancoVibracao({
 
   useEffect(() => {
     lerVinculos(raiz).then((v) => {
+      vinculosGlobal = v
       setVinculos(v)
       setVinculosLidos(true)
     })
@@ -387,6 +404,29 @@ function Maquina(p: {
   const compDoEsp = estrutura.find((c) => c.pontos.some((pt) => pt.tarefas.some((t) => t.id === tarefaEsp)))
 
   const tags = Object.entries(p.vinculos).filter(([, v]) => v.banco === p.chave && v.no === id)
+  const caixaTend = useRef<HTMLDivElement>(null)
+  const caixaEsp = useRef<HTMLDivElement>(null)
+  const enviar = async (qual: 'tendencia' | 'espectro') => {
+    const svg = (qual === 'tendencia' ? caixaTend : caixaEsp).current?.querySelector('svg')
+    if (!svg || !tags.length) return
+    const nomeMaq = banco.porId.get(id)?.nome ?? ''
+    const titulo =
+      qual === 'tendencia'
+        ? `${nomeMaq} · ${medida}`
+        : `${nomeMaq} · ${esp?.comp ?? ''} ${esp?.pto ?? ''} · ${esp?.nome ?? ''}`
+    const legenda =
+      qual === 'tendencia'
+        ? daMedida.filter((t) => series[t.id]?.length).map((t, k) => ({ nome: `${t.comp} ${t.pto}`, cor: CORES[k % CORES.length] }))
+        : escolhidas.map((i, k) => ({ nome: new Date(curvas[i].t * 1000).toLocaleDateString('pt-BR'), cor: CORES[k % CORES.length] }))
+    const blob = await graficoParaImagem(svg, titulo, legenda)
+    for (const [tag] of tags) enviarAoRelatorio(tag, blob, qual, titulo)
+  }
+  const botaoEnviar = (qual: 'tendencia' | 'espectro') =>
+    tags.length > 0 && (
+      <button className={btnMini} title={`Coloca este gráfico no quadro "${qual === 'tendencia' ? 'Tendência' : 'Espectro'}" da página de anomalia de ${tags.map(([t]) => t).join(', ')}`} onClick={() => void enviar(qual)}>
+        Enviar ao relatório
+      </button>
+    )
   const [vinculando, setVinculando] = useState(false)
 
   return (
@@ -475,10 +515,12 @@ function Maquina(p: {
       <div className="cartao-inicio">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h3 className="titulo">Tendência</h3>
+          {botaoEnviar('tendencia')}
           {nomesGlobais.length > 0 && (
             <Seletor classe="seletor-campo" rotulo="Medida" valor={medida} mudar={setMedida} opcoes={nomesGlobais.map((n) => ({ valor: n, rotulo: n }))} />
           )}
         </div>
+        <div ref={caixaTend}>
         {daMedida.length ? (
           <Tendencia
             unidade={daMedida[0].unidade}
@@ -488,12 +530,14 @@ function Maquina(p: {
         ) : (
           <p className="text-sm text-cinza">Esta máquina não tem medições de valor global.</p>
         )}
+        </div>
       </div>
 
       {/* espectros */}
       <div className="cartao-inicio">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h3 className="titulo">Espectro e sinal</h3>
+          {botaoEnviar('espectro')}
           {espectrais.length > 0 && (
             <Seletor
               classe="seletor-campo"
@@ -519,12 +563,14 @@ function Maquina(p: {
               ))}
               <span className="self-center text-cinza">clique nas datas para comparar (até 3)</span>
             </div>
+            <div ref={caixaEsp}>
             <EspectroGrafico
               sinal={esp.tipo === 'tempo'}
               unidade={esp.unidade}
               rpm={compDoEsp?.dados?.rpm}
               curvas={escolhidas.map((i) => ({ nome: data(curvas[i].t), passo: curvas[i].passo, valores: curvas[i].valores }))}
             />
+            </div>
           </>
         ) : (
           <p className="text-sm text-cinza">Sem espectros guardados para esta máquina.</p>
