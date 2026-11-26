@@ -136,8 +136,21 @@ async function espaco(imagens: ImagemRef[], slot: Slot): Promise<Paragraph> {
   return new Paragraph({ children: runs, alignment: AlignmentType.CENTER, spacing: { after: 0 } })
 }
 
+/** Imagem em data URL → bytes e tamanho (px) cabendo em l × a, sem distorcer. */
+async function imagemDeDataUrl(url: string, l: number, a: number) {
+  const blob = await (await fetch(url)).blob()
+  const bmp = await createImageBitmap(blob)
+  const esc = Math.min(l / bmp.width, a / bmp.height, 1)
+  const r = { largura: Math.round(bmp.width * esc), altura: Math.round(bmp.height * esc) }
+  bmp.close()
+  return { dados: await blob.arrayBuffer(), tipo: (blob.type.includes('png') ? 'png' : 'jpg') as 'png' | 'jpg', ...r }
+}
+
 // ---------- documento ----------
-function cabecalho() {
+function cabecalho(r: Relatorio) {
+  const contato: Paragraph[] = []
+  if (r.contato?.telefone) contato.push(p([t(`Telefone: ${r.contato.telefone}`, { size: 14 })], { depois: 0 }))
+  if (r.contato?.email) contato.push(p([t('Email – ', { size: 14 }), t(r.contato.email, { size: 14, color: '0563C1' })], { depois: 0 }))
   return new Header({
     children: [
       new Table({
@@ -150,6 +163,7 @@ function cabecalho() {
               celula([
                 p([t('José P. Xavier Sobrinho, 101 - B. Triângulo', { size: 14 })], { depois: 0 }),
                 p([t('Pedro Leopoldo – MG – Brasil - CEP:33600-000', { size: 14 })], { depois: 0 }),
+                ...contato,
               ]),
               celula([p([t('PRÜFTECHNIK · MGS', { bold: true, size: 22 })], { align: AlignmentType.RIGHT })], { centro: true }),
             ],
@@ -163,6 +177,7 @@ function cabecalho() {
 function rodape(r: Relatorio) {
   return new Footer({
     children: [
+      ...(r.art ? [p([t(`ART: ${r.art}`, { bold: true, size: 20 })], { depois: 0 })] : []),
       p([t(`${r.codigo}   ·   página `, { size: 14, color: '777777' }), new TextRun({ children: [PageNumber.CURRENT], font: FONTE, size: 14, color: '777777' })], {
         align: AlignmentType.RIGHT,
       }),
@@ -404,22 +419,38 @@ export async function gerarWord(r: Relatorio): Promise<Blob> {
     legendaCondicoes(),
     p('', { depois: 120 }),
     ...quadro(r),
-    p([t('Equipe técnica', { bold: true, size: 24 })], { antes: 360, depois: 100 }),
-    p(`Técnico responsável pela coleta de dados: ${r.equipe.coleta || '—'}`, { depois: 40 }),
-    p(`Técnico responsável pela análise de dados: ${r.equipe.analise || '—'}`),
   ]
 
+  // 4.1 Equipamentos utilizados, 4.2 Equipe técnica (com selos), 5. Anomalias registradas
   const anomalias = equipamentosAnomalia(r)
+  const equipe: (Paragraph | Table)[] = [
+    p([t('4.1 Equipamentos utilizados', { bold: true, size: 24 })], { quebra: true, depois: 120 }),
+    p(`Aparelho: ${r.aparelho || VAZIO}`, { depois: 40 }),
+    p(`Software: ${r.software || VAZIO}`),
+    p([t('4.2 Equipe Técnica', { bold: true, size: 24 })], { antes: 360, depois: 120 }),
+    p(`Técnico responsável pela coleta de dados: ${r.equipe.coleta || VAZIO}`, { depois: 40 }),
+    p(`Técnico responsável pela análise de dados: ${r.equipe.analise || VAZIO}`),
+  ]
+  const selos = [...new Set([r.equipe.seloColeta, r.equipe.seloAnalise].filter(Boolean) as string[])]
+  if (selos.length) {
+    const runs: (ImageRun | TextRun)[] = []
+    for (const [i, s] of selos.entries()) {
+      const { dados, tipo, largura, altura } = await imagemDeDataUrl(s, 260, 115)
+      if (i) runs.push(new TextRun({ text: '      ', font: FONTE }))
+      runs.push(new ImageRun({ type: tipo, data: dados, transformation: { width: largura, height: altura }, altText: { name: 'Selo', description: 'Selo de certificação', title: 'Selo' } }))
+    }
+    equipe.push(new Paragraph({ children: runs, spacing: { before: 240 } }))
+  }
   if (anomalias.length)
-    condicao.push(
-      p([t('Anomalias registradas', { bold: true, size: 24 })], { antes: 360, depois: 100 }),
+    equipe.push(
+      p([t('5. Anomalias registradas', { bold: true, size: 24 })], { antes: 480, depois: 100 }),
       p('A seguir as anomalias detectadas nos equipamentos monitorados.'),
     )
 
   // Indicadores: os mesmos gráficos SVG da prévia, convertidos em PNG
   const indicadores: (Paragraph | Table)[] = []
   if (r.incluirIndicadores !== false) {
-    const g = graficosDoRelatorio(calcularIndicadores(r))
+    const g = graficosDoRelatorio(calcularIndicadores(r), r.usina)
     const largura = Math.floor(UTIL * TWIP_PX)
     const altura = Math.round((largura * ALTURA_GRAFICO) / LARGURA_GRAFICO)
     const blocos: [string, string][] = [
@@ -460,9 +491,9 @@ export async function gerarWord(r: Relatorio): Promise<Blob> {
             },
           },
         },
-        headers: { default: cabecalho() },
+        headers: { default: cabecalho(r) },
         footers: { default: rodape(r) },
-        children: [...capa, ...condicao, ...indicadores, ...paginas],
+        children: [...capa, ...condicao, ...indicadores, ...equipe, ...paginas],
       },
     ],
   })

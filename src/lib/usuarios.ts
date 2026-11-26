@@ -12,9 +12,14 @@ export const PAPEIS: Record<Papel, string> = { tecnico: 'Técnico', revisor: 'Re
 
 export interface Usuario {
   id: string
-  nome: string // nome de exibição: é o que sai no relatório
+  nome: string // nome de exibição (lista de login e menus)
   email: string
   cargo: string
+  /** Dados do perfil que vão para o relatório */
+  nomeCompleto?: string // equipe técnica no relatório (se vazio, usa o nome)
+  telefone?: string // cabeçalho do relatório
+  art?: string // ART / registro profissional, se houver
+  selo?: string // selo de certificação (imagem PNG em data URL, já reduzida)
   papel: Papel
   ativo: boolean
   salt: string // base64
@@ -86,6 +91,14 @@ export function repoNavegador(): RepoUsuarios {
 }
 
 // ---------- regras ----------
+export type DadosPerfil = Partial<Pick<Usuario, 'nomeCompleto' | 'telefone' | 'art' | 'selo'>>
+
+const SELO_MAX = 400_000 // ~300 KB de imagem; o selo é reduzido antes de chegar aqui
+
+function limparPerfil(d: DadosPerfil): DadosPerfil {
+  if (d.selo && (!d.selo.startsWith('data:image/') || d.selo.length > SELO_MAX)) throw new Error('Imagem do selo inválida ou grande demais.')
+  return { nomeCompleto: d.nomeCompleto?.trim() || '', telefone: d.telefone?.trim() || '', art: d.art?.trim() || '', selo: d.selo || '' }
+}
 const normal = (s: string) => s.trim().toLowerCase()
 const novoIdUsuario = () => crypto.randomUUID()
 
@@ -101,7 +114,7 @@ function validarNome(lista: Usuario[], nome: string, ignorarId?: string) {
 
 export async function criarConta(
   repo: RepoUsuarios,
-  dados: { nome: string; email: string; cargo: string; senha: string },
+  dados: { nome: string; email: string; cargo: string; senha: string } & DadosPerfil,
 ): Promise<Usuario> {
   const lista = await repo.ler()
   validarNome(lista, dados.nome)
@@ -112,6 +125,7 @@ export async function criarConta(
     nome: dados.nome.trim(),
     email: dados.email.trim(),
     cargo: dados.cargo.trim(),
+    ...limparPerfil(dados),
     // a primeira conta vira administrador
     papel: lista.length === 0 ? 'admin' : 'tecnico',
     ativo: true,
@@ -140,11 +154,14 @@ async function alterar(repo: RepoUsuarios, id: string, f: (u: Usuario, lista: Us
   return novo
 }
 
-export const salvarPerfil = (repo: RepoUsuarios, id: string, p: { nome: string; email: string; cargo: string }) =>
+export const salvarPerfil = (repo: RepoUsuarios, id: string, p: { nome: string; email: string; cargo: string } & DadosPerfil) =>
   alterar(repo, id, (u, lista) => {
     validarNome(lista, p.nome, id)
-    return { ...u, nome: p.nome.trim(), email: p.email.trim(), cargo: p.cargo.trim() }
+    return { ...u, nome: p.nome.trim(), email: p.email.trim(), cargo: p.cargo.trim(), ...limparPerfil(p) }
   })
+
+/** Nome que vai para o relatório. */
+export const nomeNoRelatorio = (u: Pick<Usuario, 'nome' | 'nomeCompleto'>) => (u.nomeCompleto?.trim() || u.nome).trim()
 
 export const trocarSenha = (repo: RepoUsuarios, id: string, atual: string, nova: string) =>
   alterar(repo, id, async (u) => {

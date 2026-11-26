@@ -125,16 +125,18 @@ export async function svgParaPng(svg: string, escala = 2): Promise<ArrayBuffer> 
 }
 
 /** Os três gráficos do relatório, na ordem do modelo VMN. */
-export function graficosDoRelatorio(ind: Indicadores) {
+export function graficosDoRelatorio(ind: Indicadores, usina = '') {
   const rot = ind.meses.map(mesCurto)
+  // Jeceaba fala em "posições" (planejadas/executadas/indisponíveis); as demais, em "ordens"
+  const jec = usina === 'Jeceaba'
   return {
     execucao: svgGrafico({
-      titulo: 'Índice de execução (ORDENS)',
+      titulo: jec ? 'Índice de execução' : 'Índice de execução (ORDENS)',
       rotulos: rot,
       series: [
-        { nome: 'Ordens planejadas', cor: '#002060', valores: ind.execucao.map((x) => x.planejadas) },
-        { nome: 'Ordens executadas', cor: '#00b050', valores: ind.execucao.map((x) => x.executadas) },
-        { nome: 'Não executadas ou parciais', cor: '#00b0f0', valores: ind.execucao.map((x) => x.naoExecutadas) },
+        { nome: jec ? 'Posições planejadas' : 'Ordens planejadas', cor: '#002060', valores: ind.execucao.map((x) => x.planejadas) },
+        { nome: jec ? 'Posições executadas' : 'Ordens executadas', cor: '#00b050', valores: ind.execucao.map((x) => x.executadas) },
+        { nome: jec ? 'Posições indisponíveis' : 'Não executadas ou parciais', cor: '#00b0f0', valores: ind.execucao.map((x) => x.naoExecutadas) },
       ],
       linha: { nome: 'Índice de execução', cor: '#1f3864', valores: ind.execucao.map((x) => x.indice) },
     }),

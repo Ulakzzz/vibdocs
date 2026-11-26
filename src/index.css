@@ -665,6 +665,17 @@ body {
   flex: none;
 }
 
+.pagina {
+  position: relative;
+}
+.pg-rodape {
+  position: absolute;
+  left: 12mm;
+  bottom: 9mm;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .pg-cab {
   display: flex;
   justify-content: space-between;

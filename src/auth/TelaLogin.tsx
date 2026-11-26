@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { btnFantasma, btnPri, Campo, Texto } from '../editor/campos'
 import { Moldura } from '../ui/Moldura'
+import { CamposPerfil } from './CamposPerfil'
 import {
   criarConta,
   entrar,
@@ -10,6 +11,7 @@ import {
   PAPEIS,
   SENHA_MINIMA,
   trocarSenha,
+  type DadosPerfil,
   type RepoUsuarios,
   type Usuario,
 } from '../lib/usuarios'
@@ -31,6 +33,7 @@ export function TelaLogin({
   const [senha, setSenha] = useState('')
   const [manter, setManter] = useState(true)
   const [nova, setNova] = useState({ nome: '', email: '', cargo: '', senha: '', confirma: '' })
+  const [perfil, setPerfil] = useState<DadosPerfil>({})
   const [troca, setTroca] = useState({ nova: '', confirma: '' })
   const [pendente, setPendente] = useState<Usuario>()
   const [erro, setErro] = useState('')
@@ -79,7 +82,7 @@ export function TelaLogin({
   const fazerCadastro = () =>
     rodar(async () => {
       if (nova.senha !== nova.confirma) throw new Error('As senhas não conferem.')
-      concluir(await criarConta(repo, nova))
+      concluir(await criarConta(repo, { ...nova, ...perfil }))
     })
 
   const fazerTroca = () =>
@@ -153,17 +156,18 @@ export function TelaLogin({
               Ainda não há contas. A primeira conta criada será a de <b>{PAPEIS.admin}</b>, que gerencia as demais.
             </p>
           )}
-          <Campo rotulo="Nome (é o que aparece no relatório como equipe técnica)">
-            <Texto valor={nova.nome} mudar={(v) => setNova({ ...nova, nome: v })} placeholder="Nome e sobrenome" />
+          <Campo rotulo="Nome de exibição (aparece na lista de login)">
+            <Texto valor={nova.nome} mudar={(v) => setNova({ ...nova, nome: v })} placeholder="Como você é chamado(a)" />
           </Campo>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-3">
             <Campo rotulo="Cargo (opcional)">
               <Texto valor={nova.cargo} mudar={(v) => setNova({ ...nova, cargo: v })} placeholder="Técnico de preditiva" />
             </Campo>
-            <Campo rotulo="E-mail (opcional)">
+            <Campo rotulo="E-mail (cabeçalho do relatório)">
               <Texto tipo="email" valor={nova.email} mudar={(v) => setNova({ ...nova, email: v })} />
             </Campo>
           </div>
+          <CamposPerfil valor={perfil} mudar={setPerfil} />
           <div className="grid grid-cols-2 gap-2">
             <Campo rotulo={`Senha (mín. ${SENHA_MINIMA})`}>
               <Texto tipo="password" valor={nova.senha} mudar={(v) => setNova({ ...nova, senha: v })} />

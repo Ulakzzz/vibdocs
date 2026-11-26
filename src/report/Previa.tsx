@@ -23,17 +23,36 @@ import {
   type Slot,
 } from '../lib/relatorio'
 
-function Cabecalho() {
+function Cabecalho({ r }: { r: Relatorio }) {
+  const tel = r.contato?.telefone
+  const email = r.contato?.email
   return (
     <div className="pg-cab">
       <div className="text-[8px] leading-tight">
         José P. Xavier Sobrinho, 101 - B. Triângulo
         <br />
         Pedro Leopoldo – MG – Brasil - CEP:33600-000
+        {tel && (
+          <>
+            <br />
+            Telefone: {tel}
+          </>
+        )}
+        {email && (
+          <>
+            <br />
+            Email – <span className="text-[#0563c1] underline">{email}</span>
+          </>
+        )}
       </div>
       <div className="font-bold tracking-wide">PRÜFTECHNIK · MGS</div>
     </div>
   )
+}
+
+/** Rodapé das páginas: ART (quando houver). */
+function Rodape({ r }: { r: Relatorio }) {
+  return r.art ? <div className="pg-rodape">ART: {r.art}</div> : null
 }
 
 function Celula({ c }: { c: string }) {
@@ -79,7 +98,7 @@ function Espaco({ slot, imagens, rotulo, classe }: { slot: Slot; imagens: Imagem
 }
 
 function PaginaIndicadores({ r }: { r: Relatorio }) {
-  const g = graficosDoRelatorio(calcularIndicadores(r))
+  const g = graficosDoRelatorio(calcularIndicadores(r), r.usina)
   const bloco = (titulo: string, svg: string) => (
     <>
       <h2 className="mt-5 mb-2 text-sm font-bold">{titulo}</h2>
@@ -89,10 +108,11 @@ function PaginaIndicadores({ r }: { r: Relatorio }) {
   )
   return (
     <section className="pagina">
-      <Cabecalho />
+      <Cabecalho r={r} />
       {bloco('2. Índice de execução', g.execucao)}
       {bloco('3. Indicadores de anomalias', g.anomalias)}
       {bloco('4. Dados operacionais', g.reincidencia)}
+      <Rodape r={r} />
     </section>
   )
 }
@@ -146,7 +166,7 @@ export function Previa({ r, editarImagens }: { r: Relatorio; editarImagens?: (lo
     <div className="previa">
       {/* Página de rosto */}
       <section className="pagina">
-        <Cabecalho />
+        <Cabecalho r={r} />
         <div className="mt-24 text-center">
           <div className="text-3xl font-bold">Relatório de Análise de Vibração</div>
           <div className="mt-16 text-sm">
@@ -158,11 +178,12 @@ export function Previa({ r, editarImagens }: { r: Relatorio; editarImagens?: (lo
             {dataPorExtenso(r.dataExpedicao)}
           </div>
         </div>
+        <Rodape r={r} />
       </section>
 
       {/* 1. Condição dos equipamentos */}
       <section className="pagina">
-        <Cabecalho />
+        <Cabecalho r={r} />
         <h2 className="mt-4 mb-2 text-sm font-bold">1. Condição dos equipamentos da rota</h2>
         <LegendaCondicoes />
         {quadro.length ? (
@@ -193,22 +214,42 @@ export function Previa({ r, editarImagens }: { r: Relatorio; editarImagens?: (lo
         ) : (
           <p className="text-[10px] text-gray-500">Nenhum equipamento com as condições selecionadas.</p>
         )}
-        <h2 className="mt-6 mb-1 text-sm font-bold">Equipe técnica</h2>
-        <p className="text-[10px]">
-          Técnico responsável pela coleta de dados: {r.equipe.coleta || '—'}
-          <br />
-          Técnico responsável pela análise de dados: {r.equipe.analise || '—'}
-        </p>
-        {anomalias.length > 0 && (
-          <>
-            <h2 className="mt-6 mb-1 text-sm font-bold">Anomalias registradas</h2>
-            <p className="text-[10px]">A seguir as anomalias detectadas nos equipamentos monitorados.</p>
-          </>
-        )}
+        <Rodape r={r} />
       </section>
 
       {/* Indicadores (seções 2 a 4 do modelo VMN) */}
       {r.incluirIndicadores !== false && <PaginaIndicadores r={r} />}
+
+      {/* 4.1 Equipamentos utilizados, 4.2 Equipe técnica (com selos), 5. Anomalias registradas */}
+      <section className="pagina">
+        <Cabecalho r={r} />
+        <h2 className="mt-5 mb-2 text-sm font-bold">4.1 Equipamentos utilizados</h2>
+        <p className="text-[11px] leading-relaxed">
+          Aparelho: {r.aparelho || VAZIO}
+          <br />
+          Software: {r.software || VAZIO}
+        </p>
+        <h2 className="mt-6 mb-2 text-sm font-bold">4.2 Equipe Técnica</h2>
+        <p className="text-[11px] leading-relaxed">
+          Técnico responsável pela coleta de dados: {r.equipe.coleta || VAZIO}
+          <br />
+          Técnico responsável pela análise de dados: {r.equipe.analise || VAZIO}
+        </p>
+        {(r.equipe.seloColeta || r.equipe.seloAnalise) && (
+          <div className="mt-4 flex flex-wrap items-center gap-6">
+            {[...new Set([r.equipe.seloColeta, r.equipe.seloAnalise].filter(Boolean) as string[])].map((s) => (
+              <img key={s.slice(-40)} src={s} alt="Selo de certificação" className="h-[30mm] max-w-[75mm] object-contain" />
+            ))}
+          </div>
+        )}
+        {anomalias.length > 0 && (
+          <>
+            <h2 className="mt-8 mb-1 text-sm font-bold">5. Anomalias registradas</h2>
+            <p className="text-[11px]">A seguir as anomalias detectadas nos equipamentos monitorados.</p>
+          </>
+        )}
+        <Rodape r={r} />
+      </section>
 
       {/* Uma página por anomalia */}
       {anomalias.map((e) => {

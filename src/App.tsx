@@ -13,6 +13,7 @@ import {
   PAPEIS,
   repoNavegador,
   repoPasta,
+  nomeNoRelatorio,
   retomarSessao,
   type Usuario,
 } from './lib/usuarios'
@@ -32,7 +33,7 @@ import { historicoDemo, linhasDemo } from './lib/demo'
 import { carregarHistoricoPasta, mesDoNome, montarExecucao, montarHistorico, type Execucao, type FonteHistorico, type Historico } from './lib/historico'
 import { escolherPasta, esquecerPasta, navegadorSuportado, pastaLembrada, reconectar } from './lib/pasta'
 import { lerDaPasta, lerLocal, maisRecente, proximaSequencia, salvarEmitido, salvarLocal, salvarNaPasta } from './lib/rascunho'
-import { anomaliaDe, aplicarHistorico, equipamentosAnomalia, hojeISO, mesmoHistorico, normalizar, novoRelatorio, type Relatorio } from './lib/relatorio'
+import { anomaliaDe, aplicarHistorico, type PerfilTecnico, equipamentosAnomalia, hojeISO, mesmoHistorico, normalizar, novoRelatorio, type Relatorio } from './lib/relatorio'
 import { Previa } from './report/Previa'
 
 type Aba = 'relatorio' | 'equipamentos' | 'anomalias'
@@ -79,7 +80,27 @@ export default function App() {
   const [usuario, setUsuario] = useState<Usuario>()
   const [sessaoVerificada, setSessaoVerificada] = useState(false)
   const [janela, setJanela] = useState<'perfil' | 'usuarios'>()
-  const analista = usuario?.nome ?? ''
+  // contas ativas, para escolher os técnicos do relatório (traz nome completo e selo)
+  const [tecnicos, setTecnicos] = useState<PerfilTecnico[]>([])
+  useEffect(() => {
+    if (!repo || !usuario || janela) return
+    repo
+      .ler()
+      .then((l) =>
+        setTecnicos(
+          l.filter((u) => u.ativo).map((u) => ({ nome: nomeNoRelatorio(u), email: u.email, telefone: u.telefone, art: u.art, selo: u.selo })),
+        ),
+      )
+      .catch(() => setTecnicos([]))
+  }, [repo, usuario, janela])
+  const analista = usuario ? nomeNoRelatorio(usuario) : ''
+  const perfilTecnico: PerfilTecnico | undefined = usuario && {
+    nome: analista,
+    email: usuario.email,
+    telefone: usuario.telefone,
+    art: usuario.art,
+    selo: usuario.selo,
+  }
   const usuarioRef = useRef(analista)
   usuarioRef.current = analista
 
@@ -238,7 +259,7 @@ export default function App() {
       let r = maisRecente(local, pasta)
       if (!r) {
         const seq = raiz ? await proximaSequencia(raiz, usina, mesRef) : 1
-        r = novoRelatorio({ usina, sigla, mesReferencia: mesRef, sequencia: seq, analista, linhas })
+        r = novoRelatorio({ usina, sigla, mesReferencia: mesRef, sequencia: seq, analista, perfil: perfilTecnico, linhas })
       } else {
         // Rascunho salvo antes de existir o campo "executado": completa pela planilha do mês.
         const porLocal = new Map(linhas.map((l) => [l.local, l]))
@@ -304,6 +325,7 @@ export default function App() {
         mesReferencia: mesAtual(),
         sequencia: raiz ? await proximaSequencia(raiz, usina, mesAtual()) : 1,
         analista,
+        perfil: perfilTecnico,
         linhas: [],
         avulso: true,
       })
@@ -658,7 +680,7 @@ export default function App() {
                       </span>
                     </div>
                     <div className="min-h-0 flex-1 overflow-auto">
-                      {aba === 'relatorio' && <PainelRelatorio r={rel} atualizar={atualizar} />}
+                      {aba === 'relatorio' && <PainelRelatorio r={rel} atualizar={atualizar} tecnicos={tecnicos} />}
                       {aba === 'equipamentos' && <PainelEquipamentos r={rel} atualizar={atualizar} />}
                       {aba === 'anomalias' && (
                         <PainelAnomalias r={rel} atualizar={atualizar} selecionado={anomaliaSel} selecionar={setAnomaliaSel} />

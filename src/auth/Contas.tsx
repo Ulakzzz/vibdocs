@@ -1,6 +1,7 @@
 // Janela de conta: "Meu perfil" (todos) e "Usuários" (só administradores).
 import { useEffect, useState, type ReactNode } from 'react'
 import { btn, btnMini, btnPri, Campo, Texto } from '../editor/campos'
+import { CamposPerfil } from './CamposPerfil'
 import {
   definirAtivo,
   definirPapel,
@@ -9,6 +10,7 @@ import {
   salvarPerfil,
   SENHA_MINIMA,
   trocarSenha,
+  type DadosPerfil,
   type Papel,
   type RepoUsuarios,
   type Usuario,
@@ -59,6 +61,12 @@ export function MeuPerfil({
   fechar: () => void
 }) {
   const [p, setP] = useState({ nome: usuario.nome, email: usuario.email, cargo: usuario.cargo })
+  const [extra, setExtra] = useState<DadosPerfil>({
+    nomeCompleto: usuario.nomeCompleto,
+    telefone: usuario.telefone,
+    art: usuario.art,
+    selo: usuario.selo,
+  })
   const [s, setS] = useState({ atual: '', nova: '', confirma: '' })
   const perfil = useAcao()
   const senha = useAcao()
@@ -66,23 +74,24 @@ export function MeuPerfil({
   return (
     <Janela titulo="Meu perfil" fechar={fechar}>
       <div className="space-y-3">
-        <Campo rotulo="Nome (aparece no relatório como equipe técnica)">
+        <Campo rotulo="Nome de exibição (aparece na lista de login)">
           <Texto valor={p.nome} mudar={(v) => setP({ ...p, nome: v })} />
         </Campo>
         <div className="grid grid-cols-2 gap-2">
           <Campo rotulo="Cargo">
             <Texto valor={p.cargo} mudar={(v) => setP({ ...p, cargo: v })} />
           </Campo>
-          <Campo rotulo="E-mail">
+          <Campo rotulo="E-mail (cabeçalho do relatório)">
             <Texto tipo="email" valor={p.email} mudar={(v) => setP({ ...p, email: v })} />
           </Campo>
         </div>
+        <CamposPerfil valor={extra} mudar={setExtra} />
         <p className="text-xs text-cinza">Papel: {PAPEIS[usuario.papel]} (só um administrador pode alterar)</p>
         <button
           className={btnPri}
           onClick={() =>
             perfil.rodar(async () => {
-              mudou(await salvarPerfil(repo, usuario.id, p))
+              mudou(await salvarPerfil(repo, usuario.id, { ...p, ...extra }))
               return 'Perfil salvo.'
             })
           }

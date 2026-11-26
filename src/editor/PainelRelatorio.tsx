@@ -7,6 +7,7 @@ import {
   PADRAO_QUADRO,
   TODAS_CONDICOES,
   USINAS_RELATORIO,
+  type PerfilTecnico,
   type Relatorio,
 } from '../lib/relatorio'
 import { btnMini, Campo, Texto } from './campos'
@@ -57,7 +58,39 @@ function SeletorCondicoes(p: {
   )
 }
 
-export function PainelRelatorio({ r, atualizar }: { r: Relatorio; atualizar: Atualizar }) {
+/** Técnico do relatório: escolhe uma conta (traz nome completo e selo) ou digita um nome. */
+function Tecnico(p: {
+  rotulo: string
+  nome: string
+  selo?: string
+  tecnicos: PerfilTecnico[]
+  mudar: (nome: string, selo?: string, perfil?: PerfilTecnico) => void
+}) {
+  const id = `tec-${p.rotulo.replace(/\W/g, '')}`
+  return (
+    <Campo rotulo={p.rotulo} dica={p.selo ? 'Selo de certificação vem do perfil.' : 'Sem selo: escolha uma conta com selo no perfil.'}>
+      <div className="flex items-center gap-2">
+        <input
+          className="campo"
+          list={id}
+          value={p.nome}
+          onChange={(e) => {
+            const perfil = p.tecnicos.find((t) => t.nome === e.target.value)
+            p.mudar(e.target.value, perfil?.selo ?? (perfil ? '' : p.selo), perfil)
+          }}
+        />
+        <datalist id={id}>
+          {p.tecnicos.map((t) => (
+            <option key={t.nome} value={t.nome} />
+          ))}
+        </datalist>
+        {p.selo && <img src={p.selo} alt="" className="h-9 max-w-20 shrink-0 rounded bg-white object-contain p-0.5" />}
+      </div>
+    </Campo>
+  )
+}
+
+export function PainelRelatorio({ r, atualizar, tecnicos = [] }: { r: Relatorio; atualizar: Atualizar; tecnicos?: PerfilTecnico[] }) {
   const set = <K extends keyof Relatorio>(k: K, v: Relatorio[K]) => atualizar((x) => ({ ...x, [k]: v }))
   const contagem: Record<string, number> = {}
   for (const e of r.equipamentos) contagem[e.condicao] = (contagem[e.condicao] ?? 0) + 1
@@ -114,11 +147,42 @@ export function PainelRelatorio({ r, atualizar }: { r: Relatorio; atualizar: Atu
         <Campo rotulo="Cidade">
           <Texto valor={r.cidade} mudar={(v) => set('cidade', v)} />
         </Campo>
-        <Campo rotulo="Técnico da coleta">
-          <Texto valor={r.equipe.coleta} mudar={(v) => set('equipe', { ...r.equipe, coleta: v })} />
+        <Tecnico
+          rotulo="Técnico da coleta"
+          nome={r.equipe.coleta}
+          selo={r.equipe.seloColeta}
+          tecnicos={tecnicos}
+          mudar={(nome, selo) => set('equipe', { ...r.equipe, coleta: nome, seloColeta: selo })}
+        />
+        <Tecnico
+          rotulo="Técnico da análise"
+          nome={r.equipe.analise}
+          selo={r.equipe.seloAnalise}
+          tecnicos={tecnicos}
+          mudar={(nome, selo, perfil) =>
+            atualizar((x) => ({
+              ...x,
+              equipe: { ...x.equipe, analise: nome, seloAnalise: selo },
+              // quem analisa assina o contato do cabeçalho e a ART
+              ...(perfil ? { contato: { email: perfil.email ?? '', telefone: perfil.telefone ?? '' }, art: perfil.art ?? x.art } : {}),
+            }))
+          }
+        />
+        <Campo rotulo="E-mail no cabeçalho">
+          <Texto valor={r.contato?.email ?? ''} mudar={(v) => set('contato', { telefone: r.contato?.telefone ?? '', email: v })} />
         </Campo>
-        <Campo rotulo="Técnico da análise">
-          <Texto valor={r.equipe.analise} mudar={(v) => set('equipe', { ...r.equipe, analise: v })} />
+        <Campo rotulo="Telefone no cabeçalho">
+          <Texto valor={r.contato?.telefone ?? ''} mudar={(v) => set('contato', { email: r.contato?.email ?? '', telefone: v })} />
+        </Campo>
+        <Campo rotulo="ART">
+          <Texto valor={r.art ?? ''} mudar={(v) => set('art', v)} />
+        </Campo>
+        <div />
+        <Campo rotulo="Aparelho (4.1)">
+          <Texto valor={r.aparelho ?? ''} mudar={(v) => set('aparelho', v)} />
+        </Campo>
+        <Campo rotulo="Software (4.1)">
+          <Texto valor={r.software ?? ''} mudar={(v) => set('software', v)} />
         </Campo>
         <Campo rotulo="Meses no quadro de condição" dica="Inclui o mês do relatório. Os anteriores vêm do histórico.">
           <Texto

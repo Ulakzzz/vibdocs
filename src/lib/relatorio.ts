@@ -3,6 +3,15 @@
 import { siglaArea, type LinhaControle } from './controle'
 import { mesCurto, mesesDoQuadro, reincidenteDesde, type Execucao, type Historico } from './historico'
 
+/** Dados do técnico usados no relatório (vindos do perfil). */
+export interface PerfilTecnico {
+  nome: string
+  email?: string
+  telefone?: string
+  art?: string
+  selo?: string
+}
+
 export const USINAS_RELATORIO = ['Barreiro', 'Jeceaba', 'Mineração', 'Florestal'] as const
 
 export interface EquipRel {
@@ -85,7 +94,19 @@ export interface Relatorio {
   codigoManual: boolean // true = o técnico editou o código; não recalcular
   dataExpedicao: string // AAAA-MM-DD
   cidade: string
-  equipe: { coleta: string; analise: string }
+  equipe: {
+    coleta: string
+    analise: string
+    /** selos de certificação (data URL) copiados do perfil — o relatório fica completo mesmo se o perfil mudar */
+    seloColeta?: string
+    seloAnalise?: string
+  }
+  /** Contato no cabeçalho (vem do perfil de quem analisa) */
+  contato?: { email: string; telefone: string }
+  art?: string
+  /** 4.1 Equipamentos utilizados */
+  aparelho?: string
+  software?: string
   /** Condições cujos equipamentos aparecem no quadro de condição. */
   condicoesQuadro: string[]
   /** Condições que geram página de anomalia. */
@@ -173,6 +194,8 @@ export function novoRelatorio(p: {
   mesReferencia: string
   sequencia: number
   analista: string
+  /** perfil de quem está criando (vira técnico da coleta e da análise, contato e ART) */
+  perfil?: PerfilTecnico
   linhas: LinhaControle[]
   avulso?: boolean
 }): Relatorio {
@@ -198,7 +221,11 @@ export function novoRelatorio(p: {
     codigoManual: false,
     dataExpedicao: hojeISO(),
     cidade: cidadePadrao(p.usina),
-    equipe: { coleta: p.analista, analise: p.analista },
+    equipe: { coleta: p.analista, analise: p.analista, seloColeta: p.perfil?.selo, seloAnalise: p.perfil?.selo },
+    contato: { email: p.perfil?.email ?? '', telefone: p.perfil?.telefone ?? '' },
+    art: p.perfil?.art ?? '',
+    aparelho: 'VIBXpert II',
+    software: 'Omnitrend',
     condicoesQuadro: [...PADRAO_QUADRO],
     condicoesAnomalia: [...PADRAO_ANOMALIA],
     equipamentos,
