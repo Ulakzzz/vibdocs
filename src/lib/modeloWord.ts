@@ -5,7 +5,7 @@
 import JSZip from 'jszip'
 import * as XLSX from 'xlsx'
 import { CONDICOES, severidade } from './condicao'
-import { blobImagem } from './imagens'
+import { blobImagem, imagemNaCaixa } from './imagens'
 import { mesCurto } from './historico'
 import { calcularIndicadores } from './indicadores'
 import {
@@ -329,7 +329,7 @@ function caixaTexto(rotulo: string, linhas: [string, string][], comNome: boolean
   const corpo = linhas
     .map(
       ([nome, t]) =>
-        `<w:p><w:pPr><w:spacing w:before="0" w:after="0"/><w:jc w:val="both"/></w:pPr>${comNome ? `<w:r>${rpr(true)}<w:t xml:space="preserve">${esc(nome)}: </w:t></w:r>` : ''}<w:r>${rpr(false)}<w:t xml:space="preserve">${esc(t)}</w:t></w:r></w:p>`,
+        `<w:p><w:pPr><w:spacing w:before="0" w:after="0"/><w:jc w:val="both"/></w:pPr>${comNome && nome.trim() ? `<w:r>${rpr(true)}<w:t xml:space="preserve">${esc(nome.trim())}: </w:t></w:r>` : ''}<w:r>${rpr(false)}<w:t xml:space="preserve">${esc(t)}</w:t></w:r></w:p>`,
     )
     .join('')
   const borda = (n: string) => `<w:${n} w:val="single" w:sz="8" w:space="0" w:color="000000"/>`
@@ -434,26 +434,13 @@ async function preencherAnomalia(pk: Pacote, doc: Document, bloco: Element[], r:
     const blob = await blobImagem(img.id)
     if (!blob) continue
     const pos = posicaoLivre(img, a.imagens)
-    const { l: wi, a: hi } = await tamanho(blob)
+    // a caixa inteira (borda + margem + imagem) vira uma figura só, do tamanho da caixa na prévia
     const caixa = { l: (pos.l / 100) * W, a: (pos.a / 100) * H }
-    let corte: { l: number; t: number; r: number; b: number } | undefined
-    let l: number, h: number
-    if (img.ajuste === 'preencher') {
-      l = caixa.l
-      h = caixa.a
-      const esc2 = Math.max(caixa.l / wi, caixa.a / hi)
-      const sx = Math.max(0, (1 - caixa.l / (wi * esc2)) * 50000)
-      const sy = Math.max(0, (1 - caixa.a / (hi * esc2)) * 50000)
-      corte = { l: Math.round(sx), r: Math.round(sx), t: Math.round(sy), b: Math.round(sy) }
-    } else {
-      const esc2 = Math.min(caixa.l / wi, caixa.a / hi)
-      l = wi * esc2
-      h = hi * esc2
-    }
-    const rid = await pk.imagem('word/document.xml', await blob.arrayBuffer(), 'jpeg')
-    const x = (pos.x / 100) * W + (caixa.l - l) / 2
-    const y = TOPO + (pos.y / 100) * H + (caixa.a - h) / 2
-    const run = frag(doc, ancora(rid, { x, y, l, a: h, z: 251659264 + ordem * 1024, nome: img.nome, corte }))[0]
+    const desenho = await imagemNaCaixa(blob, caixa.l / 36000, caixa.a / 36000, img.ajuste)
+    const rid = await pk.imagem('word/document.xml', await desenho.arrayBuffer(), 'jpeg')
+    const x = (pos.x / 100) * W
+    const y = TOPO + (pos.y / 100) * H
+    const run = frag(doc, ancora(rid, { x, y, l: caixa.l, a: caixa.a, z: 251659264 + ordem * 1024, nome: img.nome }))[0]
     fim.append(run)
   }
 }

@@ -1,12 +1,17 @@
 // Editor das páginas de anomalia: cabeçalho, eixos (texto padrão + texto do técnico) e imagens.
 import { useEffect, useRef, useState } from 'react'
 import { PainelGut } from './PainelGut'
+import { SeletorCondicao } from './PainelEquipamentos'
+import { Seletor } from '../ui/Seletor'
 import { CONDICOES } from '../lib/condicao'
 import { mesCurto } from '../lib/historico'
 import { guardarImagem, urlImagem } from '../lib/imagens'
 import {
+  aAnalisar,
   anomaliaDe,
   equipamentosAnomalia,
+  faltandoNaPagina,
+  paginaPreenchida,
   localizacaoPadrao,
   novoEixo,
   rotulosUsina,
@@ -30,14 +35,27 @@ export function PainelAnomalias({
   atualizar,
   selecionado,
   selecionar,
+  aoMudarCondicao,
 }: {
   r: Relatorio
   atualizar: Atualizar
   selecionado?: string
   selecionar: (local: string) => void
+  aoMudarCondicao?: (e: EquipRel, c: string) => void
 }) {
-  const lista = equipamentosAnomalia(r)
-  const atual = lista.find((e) => e.local === selecionado) ?? lista[0]
+  const fora = r.foraDaAnalise ?? []
+  // na lista: os que geram página + os "a analisar" que foram tirados (aparecem apagados, com a caixa desmarcada)
+  const lista = r.equipamentos.filter((e) => equipamentosAnomalia(r).includes(e) || (aAnalisar(e) && fora.includes(e.local)))
+  const atual = lista.find((e) => e.local === selecionado && !fora.includes(e.local)) ?? lista.find((e) => !fora.includes(e.local))
+  const alternarAnalise = (local: string) =>
+    atualizar((x) => {
+      const f = x.foraDaAnalise ?? []
+      return { ...x, foraDaAnalise: f.includes(local) ? f.filter((l) => l !== local) : [...f, local] }
+    })
+  const mudarCondicao = (e: EquipRel, c: string) => {
+    atualizar((x) => ({ ...x, equipamentos: x.equipamentos.map((q) => (q.local === e.local ? { ...q, condicao: c } : q)) }))
+    aoMudarCondicao?.(e, c)
+  }
 
   if (!lista.length)
     return (
@@ -46,38 +64,51 @@ export function PainelAnomalias({
       </p>
     )
 
-  const completo = (e: EquipRel) => {
-    const a = r.anomalias[e.local]
-    return !!a && a.eixos.some((x) => x.situacaoPadrao || x.situacaoTecnico)
-  }
-
   return (
     <div className="flex h-full min-h-0">
       <nav className="w-52 shrink-0 overflow-auto border-r border-linha bg-nevoa/60 p-2">
         {lista.map((e) => {
           const k = CONDICOES[e.condicao]
+          const pendente = aAnalisar(e)
+          const tirado = fora.includes(e.local)
+          const pronta = paginaPreenchida(r, e)
           return (
-            <button
-              key={e.local}
-              onClick={() => selecionar(e.local)}
-              className={`anom-item ${e.local === atual?.local ? 'ativo' : ''}`}
-            >
-              <span className="chip mr-1.5" style={{ background: k?.cor, color: k?.texto }}>
-                {e.condicao}
-              </span>
-              {completo(e) ? '✓ ' : ''}
-              <span className="tag">{e.local}</span>
-              <span className="mt-0.5 block truncate text-cinza">{e.descricao}</span>
-            </button>
+            <div key={e.local} className={`anom-linha ${tirado ? 'tirado' : ''}`}>
+              {pendente && (
+                <input
+                  type="checkbox"
+                  className="anom-check"
+                  checked={!tirado}
+                  onChange={() => alternarAnalise(e.local)}
+                  title={tirado ? 'Voltar para a lista de anomalias' : 'Tirar da lista de anomalias'}
+                  aria-label={`${e.local} na lista de anomalias`}
+                />
+              )}
+              <button
+                onClick={() => !tirado && selecionar(e.local)}
+                disabled={tirado}
+                className={`anom-item ${e.local === atual?.local ? 'ativo' : ''}`}
+                title={pronta ? 'Página preenchida' : `Falta: ${faltandoNaPagina(r, e).join(', ')}`}
+              >
+                <span className={`chip mr-1.5 ${pendente ? 'chip-analisar' : ''}`} style={k ? { background: k.cor, color: k.texto } : undefined}>
+                  {e.condicao || '?'}
+                </span>
+                {pronta && <span className="anom-pronta" aria-label="preenchida">✓</span>}
+                <span className="tag">{e.local}</span>
+                <span className="mt-0.5 block truncate text-cinza">{pendente ? 'a analisar · ' : ''}{e.descricao}</span>
+              </button>
+            </div>
           )
         })}
       </nav>
-      <div className="min-w-0 flex-1 overflow-auto">{atual && <EditorAnomalia key={atual.local} r={r} e={atual} atualizar={atualizar} />}</div>
+      <div className="min-w-0 flex-1 overflow-auto">
+        {atual && <EditorAnomalia key={atual.local} r={r} e={atual} atualizar={atualizar} mudarCondicao={(c) => mudarCondicao(atual, c)} />}
+      </div>
     </div>
   )
 }
 
-function EditorAnomalia({ r, e, atualizar }: { r: Relatorio; e: EquipRel; atualizar: Atualizar }) {
+function EditorAnomalia({ r, e, atualizar, mudarCondicao }: { r: Relatorio; e: EquipRel; atualizar: Atualizar; mudarCondicao: (c: string) => void }) {
   const a = anomaliaDe(r, e)
   const mudar = (f: (a: Anomalia) => Anomalia) =>
     atualizar((x) => ({ ...x, anomalias: { ...x.anomalias, [e.local]: f(anomaliaDe(x, e)) } }))
@@ -86,9 +117,48 @@ function EditorAnomalia({ r, e, atualizar }: { r: Relatorio; e: EquipRel; atuali
   return (
     <div className="space-y-6 p-5">
       <div>
-        <div className="titulo text-lg">{e.local}</div>
-        <div className="text-xs text-cinza">
-          Condição {e.condicao} – {CONDICOES[e.condicao]?.nome}
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="titulo text-lg">{e.local}</div>
+            <div className="mt-1 flex items-center gap-2 text-xs text-cinza">
+              Condição
+              <SeletorCondicao valor={e.condicao} mudar={mudarCondicao} />
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="bt bt-sec"
+            title="Buscar relatórios antigos deste equipamento no Histórico preditivo"
+            onClick={() =>
+              window.dispatchEvent(
+                new CustomEvent('vibdocs:historico', {
+                  detail: { busca: e.local, sugestoes: [...new Set([e.local, e.descricao, a.equipamento].filter(Boolean))] },
+                }),
+              )
+            }
+          >
+            Relatórios antigos
+          </button>
+          <button
+            type="button"
+            className={`bt-finalizar ${a.finalizada ? 'feito' : ''}`}
+            aria-pressed={!!a.finalizada}
+            onClick={() => mudar((an) => ({ ...an, finalizada: !an.finalizada }))}
+            title={
+              a.finalizada
+                ? 'Página marcada como finalizada (clique para reabrir)'
+                : paginaPreenchida(r, e)
+                  ? 'Tudo preenchido'
+                  : `Falta: ${faltandoNaPagina(r, e).join(', ')}. Finalizar conta a página como preenchida assim mesmo.`
+            }
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M5 12.5l4.5 4.5L19 7.5" />
+            </svg>
+            {a.finalizada ? 'Finalizada' : 'Finalizar'}
+          </button>
+          </div>
         </div>
         <LinhaDoTempo r={r} e={e} />
       </div>
@@ -124,7 +194,7 @@ function EditorAnomalia({ r, e, atualizar }: { r: Relatorio; e: EquipRel; atuali
         </Campo>
       </div>
 
-      <PainelGut r={r} e={e} a={a} mudar={mudar} />
+      <PainelGut r={r} e={e} a={a} mudar={mudar} mudarCondicao={mudarCondicao} />
 
       <section>
         <div className="mb-1 flex items-center justify-between">
@@ -145,33 +215,38 @@ function EditorAnomalia({ r, e, atualizar }: { r: Relatorio; e: EquipRel; atuali
           {a.eixos.map((x, i) => (
             <div key={x.id} className="eixo rounded-[14px] border border-linha p-4">
               <div className="mb-2 flex items-center gap-2">
-                <input
-                  className="campo titulo w-32 text-sm"
-                  list="partes-sugeridas"
-                  aria-label="Parte do equipamento"
-                  value={x.nome}
-                  onChange={(ev) => mudarEixo(x.id, (y) => ({ ...y, nome: ev.target.value }))}
-                />
-                <select
-                  className="campo min-w-0 flex-1"
-                  value={x.falha}
-                  onChange={(ev) => {
-                    const t = textoPorId(ev.target.value)
-                    mudarEixo(x.id, (y) => ({
-                      ...y,
-                      falha: ev.target.value,
-                      situacaoPadrao: t?.situacao ?? '',
-                      recomendacaoPadrao: t?.recomendacao ?? '',
-                    }))
+                <div className="parte-campo">
+                  <input
+                    className="campo titulo w-36 text-sm"
+                    list="partes-sugeridas"
+                    aria-label="Parte do equipamento"
+                    placeholder="sem parte"
+                    title="Qualquer nome (Motor, Bomba, Mancal LA…). Vazio: o texto sai sem a parte e sem os dois pontos."
+                    value={x.nome}
+                    onChange={(ev) => mudarEixo(x.id, (y) => ({ ...y, nome: ev.target.value }))}
+                  />
+                  {x.nome && (
+                    <button
+                      type="button"
+                      className="parte-limpar"
+                      title="Sem parte: o texto sai sem “Motor:”"
+                      aria-label="Tirar a parte"
+                      onClick={() => mudarEixo(x.id, (y) => ({ ...y, nome: '' }))}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+                <Seletor
+                  classe="seletor-campo min-w-0 flex-1 seletor-falha"
+                  rotulo="Falha / texto padrão"
+                  valor={x.falha}
+                  mudar={(v) => {
+                    const t = textoPorId(v)
+                    mudarEixo(x.id, (y) => ({ ...y, falha: v, situacaoPadrao: t?.situacao ?? '', recomendacaoPadrao: t?.recomendacao ?? '' }))
                   }}
-                >
-                  <option value="">— falha / texto padrão —</option>
-                  {TEXTOS_PADRAO.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.nome}
-                    </option>
-                  ))}
-                </select>
+                  opcoes={[{ valor: '', rotulo: '— falha / texto padrão —' }, ...TEXTOS_PADRAO.map((t) => ({ valor: t.id, rotulo: t.nome }))]}
+                />
                 <button
                   className={btnMini}
                   title="Mover para cima"

@@ -21,11 +21,10 @@ import {
   VerticalAlignTable,
   VerticalPositionRelativeFrom,
   WidthType,
-  type ICropOptions,
   type ParagraphChild,
 } from 'docx'
 import { CONDICOES, severidade } from './condicao'
-import { blobImagem } from './imagens'
+import { blobImagem, imagemNaCaixa } from './imagens'
 import { mesCurto } from './historico'
 import { calcularIndicadores } from './indicadores'
 import { ALTURA_MODELO, graficosDoMes, LARGURA_MODELO, svgParaPng } from '../report/graficos'
@@ -243,7 +242,7 @@ function caixa(rotulo: string, linhas: [string, string][], comNome: boolean) {
             margins: { top: 72, bottom: 72, left: 144, right: 144 },
             children: [
               p([t(rotulo, { pt: 10 })], { depois: 100 }),
-              ...linhas.map(([nome, texto]) => p([...(comNome ? [t(`${nome}: `, { b: true, pt: 10 })] : []), t(texto, { pt: 10 })], { align: AlignmentType.JUSTIFIED })),
+              ...linhas.map(([nome, texto]) => p([...(comNome && nome.trim() ? [t(`${nome.trim()}: `, { b: true, pt: 10 })] : []), t(texto, { pt: 10 })], { align: AlignmentType.JUSTIFIED })),
             ],
           }),
         ],
@@ -263,30 +262,18 @@ async function imagens(r: Relatorio, local: string): Promise<Paragraph> {
     const blob = await blobImagem(img.id)
     if (!blob) continue
     const pos = posicaoLivre(img, a.imagens)
-    const bmp = await createImageBitmap(blob)
-    const { width: wi, height: hi } = bmp
-    bmp.close()
+    // caixa inteira (borda + margem + imagem) numa figura só, do tamanho da caixa da prévia
     const cx = { l: (pos.l / 100) * W, a: (pos.a / 100) * H }
-    const preenche = img.ajuste === 'preencher'
-    const esc = preenche ? Math.max(cx.l / wi, cx.a / hi) : Math.min(cx.l / wi, cx.a / hi)
-    const l = preenche ? cx.l : wi * esc
-    const h = preenche ? cx.a : hi * esc
-    let crop: ICropOptions | undefined
-    if (preenche) {
-      const sx = Math.max(0, (1 - cx.l / (wi * esc)) * 50)
-      const sy = Math.max(0, (1 - cx.a / (hi * esc)) * 50)
-      crop = { left: sx, right: sx, top: sy, bottom: sy }
-    }
+    const desenho = await imagemNaCaixa(blob, (cx.l * 25.4) / 96, (cx.a * 25.4) / 96, img.ajuste)
     runs.push(
       new ImageRun({
         type: 'jpg',
-        data: await blob.arrayBuffer(),
-        transformation: { width: Math.round(l), height: Math.round(h) },
-        crop,
+        data: await desenho.arrayBuffer(),
+        transformation: { width: Math.round(cx.l), height: Math.round(cx.a) },
         altText: { name: img.nome, description: img.nome, title: img.nome },
         floating: {
-          horizontalPosition: { relative: HorizontalPositionRelativeFrom.MARGIN, offset: Math.round(((pos.x / 100) * W + (cx.l - l) / 2) * EMU) },
-          verticalPosition: { relative: VerticalPositionRelativeFrom.PARAGRAPH, offset: Math.round((5.7 + (pos.y / 100) * H + (cx.a - h) / 2) * EMU) },
+          horizontalPosition: { relative: HorizontalPositionRelativeFrom.MARGIN, offset: Math.round(((pos.x / 100) * W) * EMU) },
+          verticalPosition: { relative: VerticalPositionRelativeFrom.PARAGRAPH, offset: Math.round((5.7 + (pos.y / 100) * H) * EMU) },
           wrap: { type: TextWrappingType.NONE },
           allowOverlap: true,
           lockAnchor: true,

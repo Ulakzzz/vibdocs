@@ -82,6 +82,8 @@ export interface Anomalia {
   imagens: ImagemRef[]
   /** 'padrao' = espaços fixos (tendência, espectro, foto); 'livre' = posição e tamanho escolhidos na prévia */
   layoutImagens?: 'padrao' | 'livre'
+  /** Marcada pelo técnico com o botão "Finalizar": conta como página preenchida */
+  finalizada?: boolean
   /** Priorização GUT (uso interno: não sai no relatório) */
   gut?: import('./gut').Gut
 }
@@ -127,6 +129,8 @@ export interface Relatorio {
   mesesNoQuadro?: number
   /** Cópia do histórico só dos equipamentos deste relatório (meses anteriores ao de referência). */
   historico?: { condicoes: Historico; execucao?: Execucao; fonte: string; atualizadoEm: string }
+  /** Equipamentos "a analisar" que o técnico tirou da lista de anomalias */
+  foraDaAnalise?: string[]
   /** Mostrar a página de indicadores (execução, anomalias, reincidência). */
   incluirIndicadores?: boolean
 }
@@ -250,8 +254,30 @@ export function novoRelatorio(p: {
 /** Equipamentos que aparecem no quadro de condição. */
 export const equipamentosQuadro = (r: Relatorio) => r.equipamentos.filter((e) => r.condicoesQuadro.includes(e.condicao))
 
-/** Equipamentos que geram página de anomalia, na ordem do quadro. */
-export const equipamentosAnomalia = (r: Relatorio) => r.equipamentos.filter((e) => r.condicoesAnomalia.includes(e.condicao))
+/** Executado na planilha, mas ainda sem condição: falta a análise. */
+export const aAnalisar = (e: EquipRel) => !!e.executado && !e.condicao
+
+/** Equipamentos que geram página de anomalia, na ordem do quadro.
+ *  Os "a analisar" entram também (até o técnico tirar ou o GUT definir a condição). */
+export const equipamentosAnomalia = (r: Relatorio) =>
+  r.equipamentos.filter((e) => r.condicoesAnomalia.includes(e.condicao) || (aAnalisar(e) && !(r.foraDaAnalise ?? []).includes(e.local)))
+
+/** O que ainda falta preencher na página de anomalia (vazio = completa). */
+export function faltandoNaPagina(r: Relatorio, e: EquipRel): string[] {
+  const a = r.anomalias[e.local]
+  if (!a) return ['tudo']
+  const falta: string[] = []
+  if (!e.condicao) falta.push('condição')
+  if (!a.equipamento.trim()) falta.push('equipamento')
+  if (!a.dataMedicao.trim()) falta.push('data')
+  if (!a.notasPR.trim()) falta.push('nota PR')
+  if (!a.eixos.some((x) => (x.situacaoPadrao + x.situacaoTecnico).trim())) falta.push('situação')
+  if (!a.eixos.some((x) => (x.recomendacaoPadrao + x.recomendacaoTecnico).trim())) falta.push('recomendação')
+  if (!a.imagens.length) falta.push('imagens')
+  return falta
+}
+/** Página preenchida: tudo informado, ou marcada como finalizada pelo técnico. */
+export const paginaPreenchida = (r: Relatorio, e: EquipRel) => !!r.anomalias[e.local]?.finalizada || faltandoNaPagina(r, e).length === 0
 
 /** Anomalia do equipamento (cria uma vazia, sem gravar, se ainda não existir). */
 export const anomaliaDe = (r: Relatorio, e: EquipRel): Anomalia => r.anomalias[e.local] ?? novaAnomalia(e)

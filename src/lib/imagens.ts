@@ -46,3 +46,33 @@ export async function urlImagem(id: string): Promise<string | undefined> {
   cacheUrl.set(id, u)
   return u
 }
+
+/** Imagem dentro da sua caixa do relatório: fundo branco, margem de 1 mm, borda preta fina.
+ *  Usada no Word (com e sem modelo) para ficar igual à prévia. Tamanho em mm. */
+export async function imagemNaCaixa(blob: Blob, lMm: number, aMm: number, ajuste: 'conter' | 'preencher'): Promise<Blob> {
+  const pxMm = 200 / 25.4 // 200 dpi
+  const c = document.createElement('canvas')
+  c.width = Math.max(10, Math.round(lMm * pxMm))
+  c.height = Math.max(10, Math.round(aMm * pxMm))
+  const g = c.getContext('2d')!
+  g.fillStyle = '#fff'
+  g.fillRect(0, 0, c.width, c.height)
+  const bmp = await createImageBitmap(blob)
+  const m = 1 * pxMm
+  const area = { x: m, y: m, l: c.width - 2 * m, a: c.height - 2 * m }
+  const esc = ajuste === 'preencher' ? Math.max(area.l / bmp.width, area.a / bmp.height) : Math.min(area.l / bmp.width, area.a / bmp.height)
+  const l = bmp.width * esc
+  const a = bmp.height * esc
+  g.save()
+  g.beginPath()
+  g.rect(area.x, area.y, area.l, area.a)
+  g.clip()
+  g.drawImage(bmp, area.x + (area.l - l) / 2, area.y + (area.a - a) / 2, l, a)
+  g.restore()
+  bmp.close()
+  const borda = Math.max(1, Math.round(0.26 * pxMm)) // ~0,75 pt
+  g.strokeStyle = '#000'
+  g.lineWidth = borda
+  g.strokeRect(borda / 2, borda / 2, c.width - borda, c.height - borda)
+  return new Promise((ok, falha) => c.toBlob((b) => (b ? ok(b) : falha(new Error('Falha na imagem'))), 'image/jpeg', 0.92))
+}

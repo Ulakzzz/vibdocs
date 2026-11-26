@@ -34,3 +34,4 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+scripts/fixtures/hp-teste/

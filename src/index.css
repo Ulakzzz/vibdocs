@@ -1214,6 +1214,9 @@ select option:checked {
 }
 .area-livre .peca {
   position: absolute;
+  box-sizing: border-box;
+  border: 0.75pt solid #000; /* caixa em volta da imagem, como nos relatórios emitidos */
+  padding: 1mm;
   background: #fff;
 }
 .area-livre.editavel .peca {
@@ -2265,4 +2268,243 @@ main,
 }
 tr.piscar {
   animation: piscar 1.6s ease-out;
+}
+
+/* condição: etiqueta colorida usando o Seletor */
+.seletor-botao.seletor-chip {
+  height: 1.85rem;
+  font-weight: 650;
+  color: inherit;
+}
+.seletor-botao.seletor-chip:hover:not(:disabled) {
+  background: inherit;
+  filter: brightness(1.05);
+}
+.seletor-botao.seletor-chip .seletor-seta {
+  color: currentColor;
+  opacity: 0.6;
+}
+.seletor-botao.seletor-chip .seletor-rolo span {
+  white-space: pre;
+}
+.seletor-cor {
+  display: grid;
+  place-items: center;
+  min-width: 1.6rem;
+  height: 1.25rem;
+  padding: 0 0.3rem;
+  flex: none;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12);
+}
+.seletor-lista li[aria-selected='true'] .seletor-cor {
+  box-shadow: inset 0 0 0 1.5px #000;
+}
+
+/* GUT sem cálculo */
+.gut-vazio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+/* lista de anomalias com "a analisar" */
+.anom-linha {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.anom-linha .anom-item {
+  flex: 1;
+  min-width: 0;
+}
+.anom-check {
+  margin: 12px 0 0 4px;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--color-sinal);
+  cursor: pointer;
+}
+.anom-linha.tirado .anom-item {
+  opacity: 0.45;
+  text-decoration: line-through;
+  cursor: default;
+}
+.chip-analisar {
+  border: 1.5px dashed var(--color-sinal);
+}
+.anom-pronta {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: #a3e635;
+  color: #1a2e05;
+  font-size: 10px;
+  font-weight: 900;
+}
+/* Finalizar: vira verde-limão quando marcado */
+.bt-finalizar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 2.2rem;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--color-linha);
+  font-weight: 700;
+  font-size: 0.85rem;
+  transition:
+    background-color 0.3s,
+    border-color 0.3s,
+    color 0.3s,
+    transform 0.15s;
+}
+.bt-finalizar:hover {
+  border-color: #a3e635;
+}
+.bt-finalizar:active {
+  transform: scale(0.95);
+}
+.bt-finalizar svg path {
+  stroke-dasharray: 22;
+  stroke-dashoffset: 22;
+  transition: stroke-dashoffset 0.4s 0.05s var(--ease-mola);
+}
+.bt-finalizar.feito {
+  background: #a3e635;
+  border-color: #a3e635;
+  color: #1a2e05;
+  animation: finalizar 0.45s var(--ease-mola);
+}
+.bt-finalizar.feito svg path {
+  stroke-dashoffset: 0;
+}
+@keyframes finalizar {
+  40% {
+    transform: scale(1.06);
+  }
+}
+
+/* parte do equipamento (opcional) */
+.parte-campo {
+  position: relative;
+}
+.parte-limpar {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  translate: 0 -50%;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: var(--color-cinza);
+  font-size: 1rem;
+  line-height: 1;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
+}
+.parte-limpar:hover {
+  background: var(--t-hover);
+  color: var(--color-texto);
+}
+.seletor-falha {
+  display: flex;
+}
+.seletor-falha .seletor-botao {
+  width: 100%;
+  justify-content: space-between;
+}
+
+/* ================= Histórico preditivo ================= */
+.hp-barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.hp-barra .abas button.hp-aba-on {
+  background: var(--color-sinal);
+  color: #000;
+}
+.hp-sugestao {
+  border: 1px solid var(--color-linha);
+  border-radius: 999px;
+  padding: 3px 10px;
+  transition:
+    border-color 0.2s,
+    background-color 0.2s;
+}
+.hp-sugestao:hover {
+  border-color: var(--color-sinal);
+  background: var(--t-hover);
+}
+/* linha do tempo: um ponto por relatório, na cor da criticidade */
+.hp-linha {
+  position: relative;
+  padding-left: 22px;
+}
+.hp-linha::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 8px;
+  bottom: 8px;
+  border-left: 1.5px solid var(--color-linha);
+}
+.hp-item {
+  position: relative;
+  padding-bottom: 14px;
+  animation: subir 0.45s var(--ease-mola) both;
+}
+.hp-ponto {
+  position: absolute;
+  left: -21px;
+  top: 18px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px var(--color-fundo, var(--t-fundo));
+}
+.hp-cartao {
+  border: 1px solid var(--color-linha);
+  border-radius: 16px;
+  background: var(--color-superficie);
+  padding: 14px 16px;
+  transition:
+    border-color 0.2s,
+    transform 0.3s var(--ease-mola);
+}
+.hp-cartao:hover {
+  border-color: var(--color-sinal);
+  transform: translateX(3px);
+}
+.hp-crit {
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #000;
+}
+.hp-texto {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr auto;
+  gap: 8px;
+  align-items: start;
+  margin-top: 8px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+.hp-rot {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--color-cinza);
+  padding-top: 2px;
 }

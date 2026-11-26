@@ -30,7 +30,7 @@ export function Avisos() {
       const { texto, tipo, acao } = (ev as CustomEvent<{ texto: string; tipo: Tipo; acao?: Acao }>).detail
       const id = ++n
       setLista((l) => [...l.slice(-3), { id, texto, tipo, acao }])
-      const dur = tipo === 'erro' ? 7000 : acao ? 6000 : 4000
+      const dur = tipo === 'erro' ? 8000 : acao ? 14000 : 4000
       setTimeout(() => setLista((l) => l.map((a) => (a.id === id ? { ...a, saindo: true } : a))), dur)
       setTimeout(() => setLista((l) => l.filter((a) => a.id !== id)), dur + 300)
     }

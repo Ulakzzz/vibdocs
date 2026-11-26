@@ -236,7 +236,8 @@ function PaginaAnomalia({
         <p className="rot">Situação:</p>
         {situacao.map(([id, nome, t]) => (
           <p key={id}>
-            <b>{nome}:</b> {t}
+            {nome.trim() && <b>{nome.trim()}: </b>}
+            {t}
           </p>
         ))}
       </div>
@@ -244,7 +245,7 @@ function PaginaAnomalia({
         <p className="rot">Recomendação:</p>
         {recomendacao.map(([id, nome, t]) => (
           <p key={id}>
-            {recomendacao.length > 1 && <b>{nome}: </b>}
+            {recomendacao.length > 1 && nome.trim() && <b>{nome.trim()}: </b>}
             {t}
           </p>
         ))}

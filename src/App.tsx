@@ -41,9 +41,10 @@ import { escolherPasta, esquecerPasta, navegadorSuportado, pastaLembrada, recone
 import { guardarModelo, obterModelo, visualDoModelo, type VisualModelo } from './lib/modelo'
 import { rascunhosRecentes } from './lib/rascunho'
 import { lerDaPasta, lerLocal, maisRecente, proximaSequencia, salvarEmitido, salvarLocal, salvarNaPasta } from './lib/rascunho'
-import { anomaliaDe, aplicarHistorico, artDaUsina, type PerfilTecnico, equipamentosAnomalia, hojeISO, mesmoHistorico, normalizar, novoRelatorio, type EquipRel, type ImagemRef, type Relatorio } from './lib/relatorio'
+import { anomaliaDe, aplicarHistorico, artDaUsina, paginaPreenchida, type PerfilTecnico, equipamentosAnomalia, hojeISO, mesmoHistorico, normalizar, novoRelatorio, type EquipRel, type ImagemRef, type Relatorio } from './lib/relatorio'
 import { AjustarLargura, Previa } from './report/Previa'
 import { Inicio } from './inicio/Inicio'
+import { HistoricoPreditivo } from './historico/HistoricoPreditivo'
 
 type Aba = 'relatorio' | 'equipamentos' | 'anomalias'
 type Estado = 'salvo' | 'salvando' | 'pendente' | 'erro'
@@ -116,7 +117,18 @@ export default function App() {
   const [rel, setRel] = useState<Relatorio>()
   const [aba, setAba] = useState<Aba>('equipamentos')
   // depois do login: página inicial (escolha da usina) e só então o editor
-  const [tela, setTela] = useState<'inicio' | 'relatorio'>('inicio')
+  const [tela, setTela] = useState<'inicio' | 'relatorio' | 'historico'>('inicio')
+  // página do Histórico preditivo: busca pedida (ex.: pelo botão da anomalia)
+  const [buscaHP, setBuscaHP] = useState<{ busca: string; sugestoes: string[]; n: number }>({ busca: '', sugestoes: [], n: 0 })
+  useEffect(() => {
+    const pedido = (ev: Event) => {
+      const d = (ev as CustomEvent<{ busca: string; sugestoes?: string[] }>).detail
+      setBuscaHP((x) => ({ busca: d.busca, sugestoes: d.sugestoes ?? [], n: x.n + 1 }))
+      comTransicao(() => setTela('historico'))
+    }
+    addEventListener('vibdocs:historico', pedido)
+    return () => removeEventListener('vibdocs:historico', pedido)
+  }, [])
   // "continuar de onde parou": mês e área a abrir quando a usina terminar de carregar
   const pendente = useRef<{ mesRef: string; sigla: string }>(undefined)
   const [anomaliaSel, setAnomaliaSel] = useState<string>()
@@ -282,7 +294,7 @@ export default function App() {
     const agora = Date.now()
     if (antes && agora - ultimoPasso.current > 800) {
       passado.current.push(antes)
-      if (passado.current.length > 80) passado.current.shift()
+      if (passado.current.length > 300) passado.current.shift()
     }
     ultimoPasso.current = agora
     futuro.current = []
@@ -293,12 +305,17 @@ export default function App() {
     )
   }, [])
 
-  // Outro relatório aberto: o histórico de desfazer recomeça
+  // Cada relatório guarda o seu histórico de desfazer enquanto o site está aberto (trocar de área e voltar não perde)
   const idRel = rel ? `${rel.usina}|${rel.mesReferencia}|${rel.sigla}|${rel.criadoEm}` : ''
+  const historicos = useRef(new Map<string, { passado: Relatorio[]; futuro: Relatorio[] }>())
+  const idAnterior = useRef('')
   useEffect(() => {
-    passado.current = []
-    futuro.current = []
-    setPassos({ voltar: 0, avancar: 0 })
+    if (idAnterior.current) historicos.current.set(idAnterior.current, { passado: passado.current, futuro: futuro.current })
+    const guardado = historicos.current.get(idRel)
+    passado.current = guardado?.passado ?? []
+    futuro.current = guardado?.futuro ?? []
+    idAnterior.current = idRel
+    setPassos({ voltar: passado.current.length, avancar: futuro.current.length })
   }, [idRel])
 
   // Mantém a cópia do histórico do relatório em dia (só grava se mudou).
@@ -677,6 +694,7 @@ export default function App() {
   }
 
   const nAnom = rel ? equipamentosAnomalia(rel).length : 0
+  const nPreenchidas = rel ? equipamentosAnomalia(rel).filter((e) => paginaPreenchida(rel, e)).length : 0
   const textoEstado =
     estado === 'salvando'
       ? 'Salvando…'
@@ -709,6 +727,12 @@ export default function App() {
   }
   const itensPaleta: ItemPaleta[] = [
     { id: 'a-inicio', grupo: 'Ações', rotulo: 'Ir para o início', fazer: () => comTransicao(() => setTela('inicio')) },
+    {
+      id: 'a-hist',
+      grupo: 'Ações',
+      rotulo: 'Histórico preditivo (relatórios antigos)',
+      fazer: () => window.dispatchEvent(new CustomEvent('vibdocs:historico', { detail: { busca: '' } })),
+    },
     ...(rel
       ? ([
           { id: 'a-rel', grupo: 'Ações', rotulo: 'Aba Relatório', fazer: () => comTransicao(() => (setTela('relatorio'), setAba('relatorio'))) },
@@ -777,6 +801,18 @@ export default function App() {
               )}
             </button>
           ))}
+          <button
+            className="trilho-item"
+            aria-current={tela === 'historico' ? 'page' : undefined}
+            title="Histórico preditivo (relatórios antigos)"
+            aria-label="Histórico preditivo"
+            onClick={() => comTransicao(() => setTela('historico'))}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+              <path d="M3 3v5h5M12 7v5l3 2" />
+            </svg>
+          </button>
           <button className="trilho-item" title="Buscar (Ctrl+K)" aria-label="Buscar" onClick={() => setPaleta(true)}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
               <circle cx="11" cy="11" r="7" />
@@ -828,7 +864,11 @@ export default function App() {
           )}
         </aside>
 
-        {tela === 'inicio' ? (
+        {tela === 'historico' ? (
+          <main className="min-w-0 flex-1 overflow-auto">
+            <HistoricoPreditivo key={buscaHP.n} buscaInicial={buscaHP.busca} sugestoes={buscaHP.sugestoes} />
+          </main>
+        ) : tela === 'inicio' ? (
           <main className="min-w-0 flex-1 overflow-auto">
             <Inicio
               nome={usuario?.nome ?? ''}
@@ -953,7 +993,15 @@ export default function App() {
                 {(
                   [
                     ['Equipamentos', <Contador valor={rel.equipamentos.length} />, 'na área'],
-                    ['Anomalias', <Contador valor={nAnom} />, 'com página no relatório'],
+                    [
+                      'Páginas preenchidas',
+                      <>
+                        <Contador valor={nPreenchidas} />
+                        <span className="text-cinza">/</span>
+                        <Contador valor={nAnom} />
+                      </>,
+                      'anomalias completas ou finalizadas',
+                    ],
                     ['Execução', <Contador valor={atualInd?.exec == null ? null : atualInd.exec * 100} casas={1} sufixo="%" />, 'das ordens do mês'],
                     [
                       'Reincidência',
@@ -993,7 +1041,7 @@ export default function App() {
                       {aba === 'relatorio' && <PainelRelatorio r={rel} atualizar={atualizar} tecnicos={tecnicos} raiz={raiz} />}
                       {aba === 'equipamentos' && <PainelEquipamentos r={rel} atualizar={atualizar} aoMudarCondicao={gravarNaPlanilha} />}
                       {aba === 'anomalias' && (
-                        <PainelAnomalias r={rel} atualizar={atualizar} selecionado={anomaliaSel} selecionar={setAnomaliaSel} />
+                        <PainelAnomalias r={rel} atualizar={atualizar} selecionado={anomaliaSel} selecionar={setAnomaliaSel} aoMudarCondicao={gravarNaPlanilha} />
                       )}
                     </div>
                   </div>

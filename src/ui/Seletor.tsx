@@ -7,6 +7,9 @@ export interface Opcao {
   valor: string
   rotulo: string
   extra?: string // texto pequeno à direita (ex.: quantidade)
+  cor?: string // amostra de cor à esquerda (condição)
+  corTexto?: string
+  numero?: string // número da condição dentro da amostra
 }
 
 export function Seletor(p: {
@@ -16,11 +19,19 @@ export function Seletor(p: {
   rotulo: string // nome acessível
   classe?: string
   desabilitado?: boolean
+  /** estilo do botão (ex.: a etiqueta colorida da condição) e texto mostrado nele */
+  estiloBotao?: React.CSSProperties
+  classeBotao?: string
+  textoBotao?: string
 }) {
   const [aberto, setAberto] = useState(false)
+  // a lista flutua na tela (position: fixed) para não ser cortada pelo painel; abre para cima se faltar espaço
+  const [lugar, setLugar] = useState<React.CSSProperties>({})
   const [ativo, setAtivo] = useState(0)
   const [anterior, setAnterior] = useState<string>()
   const ultimo = useRef(p.valor)
+  const textoMostrado = p.textoBotao ?? p.opcoes.find((o) => o.valor === p.valor)?.rotulo ?? p.valor
+  const ultimoTexto = useRef(textoMostrado)
   const caixa = useRef<HTMLDivElement>(null)
   const id = useId()
   const atual = p.opcoes.find((o) => o.valor === p.valor)
@@ -28,21 +39,48 @@ export function Seletor(p: {
   // rola o texto quando o valor muda (odômetro): o antigo sobe e sai, o novo entra por baixo
   useEffect(() => {
     if (ultimo.current === p.valor) return
-    setAnterior(p.opcoes.find((o) => o.valor === ultimo.current)?.rotulo ?? ultimo.current)
+    setAnterior(ultimoTexto.current)
     ultimo.current = p.valor
+    ultimoTexto.current = textoMostrado
     const t = setTimeout(() => setAnterior(undefined), 450)
     return () => clearTimeout(t)
-  }, [p.valor, p.opcoes])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.valor])
 
   useEffect(() => {
     if (!aberto) return
     const fora = (e: PointerEvent) => !caixa.current?.contains(e.target as Node) && setAberto(false)
+    // rolou a página ou o painel: a lista acompanha o botão (fecha só se o botão sair da tela)
+    const rolou = () => {
+      const r = caixa.current?.getBoundingClientRect()
+      if (!r || r.bottom < 0 || r.top > innerHeight) return setAberto(false)
+      posicionar()
+    }
+    const redimensionou = () => posicionar()
     addEventListener('pointerdown', fora)
-    return () => removeEventListener('pointerdown', fora)
+    addEventListener('scroll', rolou, true)
+    addEventListener('resize', redimensionou)
+    return () => {
+      removeEventListener('pointerdown', fora)
+      removeEventListener('scroll', rolou, true)
+      removeEventListener('resize', redimensionou)
+    }
   }, [aberto])
 
+  const posicionar = () => {
+    const r = caixa.current!.getBoundingClientRect()
+    const alturaLista = Math.min(320, p.opcoes.length * 36 + 14)
+    const emCima = r.bottom + alturaLista + 12 > innerHeight && r.top > alturaLista + 12
+    setLugar({
+      position: 'fixed',
+      left: Math.min(r.left, innerWidth - 300),
+      minWidth: Math.max(r.width, 176),
+      ...(emCima ? { top: 'auto', bottom: innerHeight - r.top + 6, transformOrigin: 'bottom' } : { top: r.bottom + 6 }),
+    })
+  }
   const abrir = () => {
     if (p.desabilitado) return
+    posicionar()
     setAtivo(Math.max(0, p.opcoes.findIndex((o) => o.valor === p.valor)))
     setAberto(true)
   }
@@ -74,7 +112,8 @@ export function Seletor(p: {
     <div className={`seletor ${aberto ? 'aberto' : ''} ${p.classe ?? ''}`} ref={caixa}>
       <button
         type="button"
-        className="seletor-botao"
+        className={`seletor-botao ${p.classeBotao ?? ''}`}
+        style={p.estiloBotao}
         aria-haspopup="listbox"
         aria-expanded={aberto}
         aria-controls={id}
@@ -90,7 +129,7 @@ export function Seletor(p: {
             </span>
           )}
           <span key={p.valor} className={anterior !== undefined ? 'entra' : ''}>
-            {atual?.rotulo ?? p.valor}
+            {p.textoBotao ?? atual?.rotulo ?? p.valor}
             {atual?.extra && <small> {atual.extra}</small>}
           </span>
         </span>
@@ -99,7 +138,7 @@ export function Seletor(p: {
         </svg>
       </button>
       {aberto && (
-        <ul className="seletor-lista" role="listbox" id={id} aria-label={p.rotulo}>
+        <ul className="seletor-lista" role="listbox" id={id} aria-label={p.rotulo} style={lugar}>
           {p.opcoes.map((o, i) => (
             <li
               key={o.valor}
@@ -110,6 +149,11 @@ export function Seletor(p: {
               onPointerEnter={() => setAtivo(i)}
               onClick={() => escolher(o.valor)}
             >
+              {o.cor && (
+                <span className="seletor-cor" style={{ background: o.cor, color: o.corTexto }}>
+                  {o.numero}
+                </span>
+              )}
               <span>{o.rotulo}</span>
               {o.extra && <small>{o.extra}</small>}
               {o.valor === p.valor && (

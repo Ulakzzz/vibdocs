@@ -9,6 +9,10 @@ const modelo = process.argv[4]
 
 const navegador = await chromium.launch({ channel: 'msedge' })
 const pagina = await (await navegador.newContext({ acceptDownloads: true })).newPage()
+const escolherFalha = async (k, nome) => {
+  await pagina.locator('.seletor-falha').nth(k).locator('button').first().click()
+  await pagina.locator('li[role=option]', { hasText: nome }).first().click()
+}
 pagina.on('pageerror', (e) => console.error('erro na página:', e.message))
 await pagina.goto(url)
 if (modelo) {
@@ -19,10 +23,10 @@ if (modelo) {
 await pagina.getByRole('tab', { name: /^Anomalias/ }).click()
 
 // Eixo 01: texto padrão + observação do técnico
-await pagina.locator('select').filter({ hasText: 'falha / texto padrão' }).first().selectOption('folga-rotativa')
+await escolherFalha(0, 'Folga rotativa (mancal)')
 await pagina.getByPlaceholder('Texto livre').first().fill('Lado direito sentido fluxo (texto de teste).')
 await pagina.getByRole('button', { name: 'Adicionar parte' }).click()
-await pagina.locator('select').filter({ hasText: 'falha / texto padrão' }).nth(1).selectOption('normal')
+await escolherFalha(1, 'Normalidade operacional')
 
 // Duas imagens fictícias: tendência (larga) e foto (alta, para testar o ajuste)
 await pagina.evaluate(async () => {

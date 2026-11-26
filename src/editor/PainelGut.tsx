@@ -24,12 +24,47 @@ function Notas({ valor, mudar, rotulo, dica }: { valor: number; mudar: (n: numbe
   )
 }
 
-export function PainelGut({ r, e, a, mudar }: { r: Relatorio; e: EquipRel; a: Anomalia; mudar: (f: (a: Anomalia) => Anomalia) => void }) {
+const CONDICAO_DA_SITUACAO = { Alarme: '4', Alerta: '3', 'Pré-alerta': '2' } as const
+
+export function PainelGut({
+  r,
+  e,
+  a,
+  mudar,
+  mudarCondicao,
+}: {
+  r: Relatorio
+  e: EquipRel
+  a: Anomalia
+  mudar: (f: (a: Anomalia) => Anomalia) => void
+  /** o resultado do GUT vira a condição do equipamento (e vai para a planilha de controle) */
+  mudarCondicao?: (c: string) => void
+}) {
   const g = a.gut ?? gutPadrao()
-  const set = (p: Partial<Gut>) => mudar((an) => ({ ...an, gut: { ...(an.gut ?? gutPadrao()), ...p } }))
+  const set = (p: Partial<Gut>) => {
+    const novo = { ...g, ...p }
+    mudar((an) => ({ ...an, gut: { ...(an.gut ?? gutPadrao()), ...p } }))
+    if (novo.modo) {
+      const c = CONDICAO_DA_SITUACAO[calcularGut(novo).situacao]
+      if (c !== e.condicao) mudarCondicao?.(c)
+    }
+  }
   const res = calcularGut(g)
   const atual = severidade(e.condicao)
   const diverge = !!g.modo && atual && atual !== res.situacao
+
+  if (!a.gut)
+    return (
+      <section className="gut gut-vazio">
+        <div>
+          <h3 className="titulo text-base">Priorização GUT</h3>
+          <p className="text-xs text-cinza">Sem GUT nesta anomalia. Ao calcular, o resultado define a condição (pré-alerta, alerta ou alarme).</p>
+        </div>
+        <button type="button" className="bt bt-sec" onClick={() => mudar((an) => ({ ...an, gut: gutPadrao() }))}>
+          Calcular GUT
+        </button>
+      </section>
+    )
   const avisos = lembretes(r, a, e.condicao)
   const fmt = (d: Date) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
@@ -37,7 +72,12 @@ export function PainelGut({ r, e, a, mudar }: { r: Relatorio; e: EquipRel; a: An
     <section className="gut">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="titulo text-base">Priorização GUT</h3>
-        <span className="text-xs text-cinza">uso interno, não sai no relatório</span>
+        <span className="flex items-center gap-3 text-xs text-cinza">
+          uso interno, não sai no relatório
+          <button type="button" className="bt bt-fantasma bt-mini" onClick={() => mudar((an) => ({ ...an, gut: undefined }))}>
+            Remover GUT
+          </button>
+        </span>
       </div>
       <div className="flex flex-wrap items-start gap-4">
         <div className="min-w-[17rem] flex-1 space-y-2.5">
@@ -83,7 +123,8 @@ export function PainelGut({ r, e, a, mudar }: { r: Relatorio; e: EquipRel; a: An
       </div>
       {diverge && (
         <p className="mt-3 rounded-[10px] border border-dashed border-sinal px-3 py-2 text-xs">
-          O GUT indica <b>{res.situacao}</b>, mas a condição marcada é <b>{CONDICOES[e.condicao]?.nome}</b>. Confira antes de emitir.
+          O GUT indica <b>{res.situacao}</b>, mas a condição marcada é <b>{CONDICOES[e.condicao]?.nome ?? 'a analisar'}</b>. Mude qualquer
+          nota para aplicar o GUT, ou mantenha a condição escolhida.
         </p>
       )}
       <div className="mt-4">

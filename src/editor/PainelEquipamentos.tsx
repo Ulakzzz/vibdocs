@@ -6,6 +6,7 @@ import { mesCurto } from '../lib/historico'
 import { condicaoNoMes, reincidenciaAuto, TODAS_CONDICOES, type EquipRel, type Relatorio } from '../lib/relatorio'
 import { Abas, btn, btnMini } from './campos'
 import { avisar, desfazerUltima } from '../ui/Avisos'
+import { Seletor } from '../ui/Seletor'
 
 type Atualizar = (f: (r: Relatorio) => Relatorio) => void
 
@@ -104,24 +105,24 @@ function DetalheHistorico({ r, e, meses }: { r: Relatorio; e: EquipRel; meses: s
   )
 }
 
-/** Seletor de condição com aparência de etiqueta colorida. */
-function SeletorCondicao({ valor, mudar }: { valor: string; mudar: (c: string) => void }) {
-  // sem condição = medido (executado) mas ainda não analisado
-  const k = CONDICOES[valor] ?? { nome: 'A analisar', cor: 'transparent', texto: 'currentColor' }
+/** Seletor de condição: etiqueta colorida que abre a mesma lista animada das áreas.
+ *  "A analisar" (vazio) volta o equipamento para sem condição, caso tenha sido marcado por engano. */
+export function SeletorCondicao({ valor, mudar }: { valor: string; mudar: (c: string) => void }) {
+  const k = CONDICOES[valor]
   return (
-    <label className={`seletor-chip ${valor ? '' : 'a-analisar'}`} style={{ background: k.cor, color: k.texto }} title={`${valor || '–'} – ${k.nome}`}>
-      <span className="font-semibold">{valor || '?'}</span>
-      <span className="hidden truncate xl:inline">{k.nome}</span>
-      <span aria-hidden className="opacity-60">▾</span>
-      <select value={valor} onChange={(ev) => mudar(ev.target.value)} aria-label="Condição">
-        {!valor && <option value="">? – A analisar</option>}
-        {TODAS_CONDICOES.map((c) => (
-          <option key={c} value={c}>
-            {c} – {CONDICOES[c].nome}
-          </option>
-        ))}
-      </select>
-    </label>
+    <Seletor
+      rotulo="Condição"
+      valor={valor}
+      mudar={mudar}
+      classe="seletor-condicao"
+      classeBotao={`seletor-chip ${valor ? '' : 'a-analisar'}`}
+      estiloBotao={k ? { background: k.cor, color: k.texto } : undefined}
+      textoBotao={k ? `${valor}  ${k.nome}` : '?  A analisar'}
+      opcoes={[
+        { valor: '', rotulo: 'A analisar', numero: '?', cor: 'transparent' },
+        ...TODAS_CONDICOES.map((c) => ({ valor: c, rotulo: CONDICOES[c].nome, numero: c, cor: CONDICOES[c].cor, corTexto: CONDICOES[c].texto })),
+      ]}
+    />
   )
 }
 
