@@ -6,6 +6,9 @@ import { Abas, btn, btnFantasma, btnPri } from './editor/campos'
 import { calcularIndicadores } from './lib/indicadores'
 import { Carregando, Contador, Copiar } from './ui/Contador'
 import { comTransicao } from './ui/transicao'
+import { Seletor } from './ui/Seletor'
+import { Avisos, avisar } from './ui/Avisos'
+import { gravarCondicoes } from './lib/planilhaEscrita'
 import { IcAnomalia, IcEquipamentos, IcInicio, IcMais, IcPrevia, IcRelatorio } from './ui/Icones'
 import { Marca, Moldura } from './ui/Moldura'
 import { BotaoTema } from './ui/Tema'
@@ -35,7 +38,7 @@ import { carregarHistoricoPasta, mesDoNome, montarExecucao, montarHistorico, typ
 import { escolherPasta, esquecerPasta, navegadorSuportado, pastaLembrada, reconectar } from './lib/pasta'
 import { guardarModelo, obterModelo, visualDoModelo, type VisualModelo } from './lib/modelo'
 import { lerDaPasta, lerLocal, maisRecente, proximaSequencia, salvarEmitido, salvarLocal, salvarNaPasta } from './lib/rascunho'
-import { anomaliaDe, aplicarHistorico, artDaUsina, type PerfilTecnico, equipamentosAnomalia, hojeISO, mesmoHistorico, normalizar, novoRelatorio, type ImagemRef, type Relatorio } from './lib/relatorio'
+import { anomaliaDe, aplicarHistorico, artDaUsina, type PerfilTecnico, equipamentosAnomalia, hojeISO, mesmoHistorico, normalizar, novoRelatorio, type EquipRel, type ImagemRef, type Relatorio } from './lib/relatorio'
 import { AjustarLargura, Previa } from './report/Previa'
 import { Inicio } from './inicio/Inicio'
 
@@ -282,7 +285,7 @@ export default function App() {
           equipamentos: r.equipamentos.map((e) => {
             const l = porLocal.get(e.local)
             if (!l) return e
-            return { ...e, executado: e.executado ?? l.executado, plano: e.plano ?? l.plano }
+            return { ...e, executado: e.executado ?? l.executado, plano: e.plano ?? l.plano, celula: e.celula ?? l.celula }
           }),
         }
       }
@@ -424,6 +427,29 @@ export default function App() {
   const [aviso, setAviso] = useState('')
 
   // imagens e nomes do modelo .docx, para a prévia/PDF ficarem iguais ao Word
+  // condição definida depois da análise → grava na planilha de controle do mês (uma célula, em fila)
+  const filaPlanilha = useRef(Promise.resolve())
+  const gravarNaPlanilha = useCallback(
+    (e: EquipRel, c: string) => {
+      if (!raiz || !rel || rel.avulso || e.manual || !e.celula || !mes) return
+      const [ano, mesPasta] = mes.split('/')
+      if (`${ano}-${mesPasta.slice(0, 2)}` !== rel.mesReferencia) return
+      const aba = linhas.find((l) => l.local === e.local)?.aba ?? 'Análise de Vibração'
+      const u = usina as (typeof USINAS)[number]
+      filaPlanilha.current = filaPlanilha.current.then(async () => {
+        try {
+          const info = await localizarPlanilha(raiz, u, ano, mesPasta)
+          await gravarCondicoes(info.arquivo, aba, [{ celula: e.celula!, valor: c }])
+          atualizar((x) => ({ ...x, equipamentos: x.equipamentos.map((q) => (q.local === e.local ? { ...q, condicaoPlanilha: c } : q)) }))
+          avisar(`Planilha de controle atualizada: ${e.local} → ${c || 'em branco'} (célula ${e.celula}).`, 'ok')
+        } catch (err) {
+          avisar(`Não gravei na planilha: ${(err as Error).message} Se ela estiver aberta no Excel, feche e escolha a condição de novo.`, 'erro')
+        }
+      })
+    },
+    [raiz, rel, mes, linhas, usina, atualizar],
+  )
+
   const editarImagens = useCallback(
     (local: string, imagens: ImagemRef[]) =>
       atualizar((x) => {
@@ -451,6 +477,17 @@ export default function App() {
       vivo = false
     }
   }, [raiz, usinaRel, versaoModelo])
+  // Exportar PDF com o botão de progresso: a borda se completa, abre a impressão e mostra "pronto"
+  const [pdf, setPdf] = useState<'' | 'preparando' | 'pronto'>('')
+  const exportarPdf = () => {
+    setPdf('preparando')
+    setTimeout(() => {
+      window.print()
+      setPdf('pronto')
+      setTimeout(() => setPdf(''), 1800)
+    }, 700)
+  }
+
   // sem modelo do Word: pergunta antes (carregar o .docx agora ou sair no layout padrão)
   const [pedirModelo, setPedirModelo] = useState(false)
   const exportarWord = (semModelo = false) =>
@@ -512,11 +549,7 @@ export default function App() {
           <h3 className="text-sm font-semibold">Sem a pasta sincronizada</h3>
           <p className="mt-1 text-xs text-cinza">Importe uma ou várias planilhas: a mais recente vira o mês do relatório e as outras, histórico.</p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <select className="campo w-auto" value={usina} onChange={(e) => setUsina(e.target.value)} aria-label="Usina">
-              {USINAS.map((u) => (
-                <option key={u}>{u}</option>
-              ))}
-            </select>
+            <Seletor classe="seletor-campo" rotulo="Usina" valor={usina} mudar={setUsina} opcoes={USINAS.map((u) => ({ valor: u, rotulo: u }))} />
             <label className={btn}>
               Importar planilhas
               <input type="file" accept=".xlsx" multiple className="sr-only" onChange={(e) => importarXlsx([...(e.target.files ?? [])])} />
@@ -557,7 +590,9 @@ export default function App() {
           ? 'Erro ao salvar'
           : salvoEm
             ? `Salvo às ${salvoEm}${raiz ? ' no SharePoint' : ' neste navegador'}`
-            : ''
+            : rel
+              ? `Último salvamento: ${new Date(rel.atualizadoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
+              : ''
   const ind = rel ? calcularIndicadores(rel) : undefined
   const atualInd = ind && { exec: ind.execucao.at(-1)?.indice ?? null, reinc: ind.reincidencia.at(-1)?.indice ?? null }
   const abasTrilho: [Aba, string, () => ReactNode][] = [
@@ -650,37 +685,30 @@ export default function App() {
           <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-linha bg-superficie px-5 py-3">
             {!rel?.avulso ? (
               <nav className="caminho flex items-center gap-1 text-sm" aria-label="Relatório aberto">
-                <select value={usina} onChange={(e) => setUsina(e.target.value)} disabled={!raiz} aria-label="Usina">
-                  {USINAS.map((u) => (
-                    <option key={u}>{u}</option>
-                  ))}
-                </select>
+                <Seletor rotulo="Usina" valor={usina} mudar={setUsina} desabilitado={!raiz} opcoes={USINAS.map((u) => ({ valor: u, rotulo: u }))} />
                 <span className="text-[#c9c9c4]">/</span>
                 {raiz ? (
-                  <select value={mes} onChange={(e) => setMes(e.target.value)} aria-label="Mês">
-                    {Object.entries(meses).flatMap(([ano, ms]) =>
-                      ms.map((m) => (
-                        <option key={`${ano}/${m}`} value={`${ano}/${m}`}>
-                          {m.slice(3)} {ano}
-                        </option>
-                      )),
-                    )}
-                  </select>
+                  <Seletor
+                    rotulo="Mês"
+                    valor={mes}
+                    mudar={setMes}
+                    opcoes={Object.entries(meses).flatMap(([ano, ms]) => ms.map((m) => ({ valor: `${ano}/${m}`, rotulo: `${m.slice(3)} ${ano}` })))}
+                  />
                 ) : (
                   <span className="px-2 text-cinza">{fonteManual}</span>
                 )}
                 <span className="text-[#c9c9c4]">/</span>
-                <select value={sigla} onChange={(e) => setSigla(e.target.value)} aria-label="Área" className="titulo">
-                  {siglas.map(([s, n]) => (
-                    <option key={s} value={s}>
-                      {s} ({n})
-                    </option>
-                  ))}
-                </select>
+                <Seletor
+                  classe="titulo"
+                  rotulo="Área"
+                  valor={sigla}
+                  mudar={setSigla}
+                  opcoes={siglas.map(([s, n]) => ({ valor: s, rotulo: s, extra: `(${n})` }))}
+                />
               </nav>
             ) : (
               <div className="flex items-center gap-2">
-                <span className="rounded-full bg-sinal-claro px-3 py-1 text-sm font-medium">Relatório avulso, {rel.usina}</span>
+                <span className="rounded-full bg-sinal px-3 py-1 text-sm font-medium text-preto">Relatório avulso, {rel.usina}</span>
                 {linhas.length > 0 && (
                   <button className={btnFantasma} onClick={fecharAvulso}>
                     Voltar à área
@@ -691,7 +719,10 @@ export default function App() {
 
             <div className="ml-auto flex items-center gap-2">
               {carregandoHist && <span className="text-xs text-amber-700">{carregandoHist}</span>}
-              <span className={`mr-1 flex items-center gap-1.5 text-xs ${estado === 'erro' ? 'text-red-700' : 'text-cinza'}`}>
+              <span
+                className={`estado-salvo mr-1 flex items-center gap-1.5 text-xs ${estado === 'erro' ? 'text-red-700' : 'text-cinza'}`}
+                title={`Salvamento automático 1,5 s depois de cada alteração, neste navegador${raiz ? ' e na pasta do SharePoint' : ''}. Continua salvo ao fechar o site ou desligar o computador.`}
+              >
                 {textoEstado && (
                   <span className={`h-1.5 w-1.5 rounded-full ${estado === 'salvo' ? 'bg-green-600' : estado === 'erro' ? 'bg-red-600' : 'bg-sinal'}`} />
                 )}
@@ -714,8 +745,11 @@ export default function App() {
               <button className={btn} onClick={() => exportarWord()} disabled={!rel || gerandoWord}>
                 {gerandoWord ? 'Gerando Word…' : 'Exportar Word'}
               </button>
-              <button className={btnPri} onClick={() => window.print()} disabled={!rel}>
-                Exportar PDF
+              <button className={`${btnPri} bt-progresso ${pdf}`} onClick={exportarPdf} disabled={!rel || pdf === 'preparando'}>
+                <svg className="moldura-progresso" aria-hidden preserveAspectRatio="none">
+                  <rect x="1" y="1" rx="18" ry="18" pathLength="100" />
+                </svg>
+                {pdf === 'preparando' ? 'Preparando…' : pdf === 'pronto' ? 'PDF pronto' : 'Exportar PDF'}
               </button>
             </div>
           </header>
@@ -783,7 +817,7 @@ export default function App() {
                     </div>
                     <div className="min-h-0 flex-1 overflow-auto">
                       {aba === 'relatorio' && <PainelRelatorio r={rel} atualizar={atualizar} tecnicos={tecnicos} raiz={raiz} />}
-                      {aba === 'equipamentos' && <PainelEquipamentos r={rel} atualizar={atualizar} />}
+                      {aba === 'equipamentos' && <PainelEquipamentos r={rel} atualizar={atualizar} aoMudarCondicao={gravarNaPlanilha} />}
                       {aba === 'anomalias' && (
                         <PainelAnomalias r={rel} atualizar={atualizar} selecionado={anomaliaSel} selecionar={setAnomaliaSel} />
                       )}
@@ -813,6 +847,7 @@ export default function App() {
         )}
       </div>
 
+      <Avisos />
       {pedirModelo && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-6 backdrop-blur-[3px]" onMouseDown={() => setPedirModelo(false)}>
           <div

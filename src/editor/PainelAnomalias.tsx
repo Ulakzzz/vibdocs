@@ -1,5 +1,6 @@
 // Editor das páginas de anomalia: cabeçalho, eixos (texto padrão + texto do técnico) e imagens.
 import { useEffect, useRef, useState } from 'react'
+import { PainelGut } from './PainelGut'
 import { CONDICOES } from '../lib/condicao'
 import { mesCurto } from '../lib/historico'
 import { guardarImagem, urlImagem } from '../lib/imagens'
@@ -122,6 +123,8 @@ function EditorAnomalia({ r, e, atualizar }: { r: Relatorio; e: EquipRel; atuali
           <Texto valor={a.notasPR} mudar={(v) => mudar((an) => ({ ...an, notasPR: v }))} />
         </Campo>
       </div>
+
+      <PainelGut r={r} e={e} a={a} mudar={mudar} />
 
       <section>
         <div className="mb-1 flex items-center justify-between">

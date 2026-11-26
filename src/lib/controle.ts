@@ -17,6 +17,9 @@ export interface LinhaControle {
   motorVel?: number
   movidaAcc?: number
   movidaVel?: number
+  /** célula da Condição na aba de vibração (ex.: "G12"), para gravar a condição de volta na planilha */
+  celula?: string
+  aba?: string
 }
 
 export interface PlanilhaInfo {
@@ -84,7 +87,9 @@ export function lerXlsxVibracao(buf: ArrayBuffer, nomeArquivo: string): LinhaCon
   const wb = XLSX.read(buf, { type: 'array' })
   const nomeAba = wb.SheetNames.find((n) => /vibra/i.test(n))
   if (!nomeAba) throw new Error(`A planilha ${nomeArquivo} não tem aba de vibração.`)
-  const linhas = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nomeAba], { header: 1, raw: true, defval: '' })
+  const ws = wb.Sheets[nomeAba]
+  const inicio = XLSX.utils.decode_range(ws['!ref'] ?? 'A1').s
+  const linhas = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, defval: '', blankrows: true })
 
   const iCab = linhas.findIndex((r) => r.some((c) => /local de instala/i.test(txt(c))))
   if (iCab < 0) throw new Error('Cabeçalho "Local de instalação" não encontrado na aba de vibração.')
@@ -109,7 +114,8 @@ export function lerXlsxVibracao(buf: ArrayBuffer, nomeArquivo: string): LinhaCon
   }
 
   const out: LinhaControle[] = []
-  for (const r of linhas.slice(iCab + 1)) {
+  for (const [j, r] of linhas.entries()) {
+    if (j <= iCab) continue
     const local = txt(r[c.local])
     if (!local || /local de instala/i.test(local)) continue
     out.push({
@@ -124,6 +130,8 @@ export function lerXlsxVibracao(buf: ArrayBuffer, nomeArquivo: string): LinhaCon
       motorVel: num(r[v.motorVel]),
       movidaAcc: num(r[v.movidaAcc]),
       movidaVel: num(r[v.movidaVel]),
+      celula: c.cond >= 0 ? XLSX.utils.encode_cell({ r: inicio.r + j, c: inicio.c + c.cond }) : undefined,
+      aba: nomeAba,
     })
   }
   return out

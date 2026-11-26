@@ -22,6 +22,7 @@ export interface EquipRel {
   condicaoPlanilha?: string // como veio da planilha de controle
   manual?: boolean // adicionado à mão (fora da planilha)
   executado?: boolean // ordem executada no mês (coluna "Execução" da planilha)
+  celula?: string // célula da Condição na planilha de controle (para gravar de volta)
 }
 
 export interface Eixo {
@@ -81,6 +82,8 @@ export interface Anomalia {
   imagens: ImagemRef[]
   /** 'padrao' = espaços fixos (tendência, espectro, foto); 'livre' = posição e tamanho escolhidos na prévia */
   layoutImagens?: 'padrao' | 'livre'
+  /** Priorização GUT (uso interno: não sai no relatório) */
+  gut?: import('./gut').Gut
 }
 
 export interface Relatorio {
@@ -214,6 +217,7 @@ export function novoRelatorio(p: {
       condicao: l.condicao,
       condicaoPlanilha: l.condicao,
       executado: l.executado,
+      celula: l.celula,
     }))
   return {
     versao: 2,

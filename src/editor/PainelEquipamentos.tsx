@@ -105,13 +105,15 @@ function DetalheHistorico({ r, e, meses }: { r: Relatorio; e: EquipRel; meses: s
 
 /** Seletor de condição com aparência de etiqueta colorida. */
 function SeletorCondicao({ valor, mudar }: { valor: string; mudar: (c: string) => void }) {
-  const k = CONDICOES[valor] ?? CONDICOES.X
+  // sem condição = medido (executado) mas ainda não analisado
+  const k = CONDICOES[valor] ?? { nome: 'A analisar', cor: 'transparent', texto: 'currentColor' }
   return (
-    <label className="seletor-chip" style={{ background: k.cor, color: k.texto }} title={`${valor} – ${k.nome}`}>
-      <span className="font-semibold">{valor || '–'}</span>
+    <label className={`seletor-chip ${valor ? '' : 'a-analisar'}`} style={{ background: k.cor, color: k.texto }} title={`${valor || '–'} – ${k.nome}`}>
+      <span className="font-semibold">{valor || '?'}</span>
       <span className="hidden truncate xl:inline">{k.nome}</span>
       <span aria-hidden className="opacity-60">▾</span>
       <select value={valor} onChange={(ev) => mudar(ev.target.value)} aria-label="Condição">
+        {!valor && <option value="">? – A analisar</option>}
         {TODAS_CONDICOES.map((c) => (
           <option key={c} value={c}>
             {c} – {CONDICOES[c].nome}
@@ -122,8 +124,19 @@ function SeletorCondicao({ valor, mudar }: { valor: string; mudar: (c: string) =
   )
 }
 
-export function PainelEquipamentos({ r, atualizar }: { r: Relatorio; atualizar: Atualizar }) {
-  const [filtro, setFiltro] = useState<'todos' | 'anomalias'>('todos')
+export function PainelEquipamentos({
+  r,
+  atualizar,
+  aoMudarCondicao,
+}: {
+  r: Relatorio
+  atualizar: Atualizar
+  /** chamado quando o técnico muda a condição (o app grava na planilha de controle) */
+  aoMudarCondicao?: (e: EquipRel, condicao: string) => void
+}) {
+  // planilhas novas têm a coluna "Execução": por padrão a lista mostra só os executados
+  const temExecucao = r.equipamentos.some((e) => e.executado)
+  const [filtro, setFiltro] = useState<'executados' | 'todos' | 'anomalias'>(temExecucao ? 'executados' : 'todos')
   const [novo, setNovo] = useState({ local: '', descricao: '', condicao: '3' })
   const [nMeses, setNMeses] = useState(() => Number(localStorage.getItem(CHAVE_MESES)) || 6)
   const [aberto, setAberto] = useState<string>()
@@ -134,8 +147,11 @@ export function PainelEquipamentos({ r, atualizar }: { r: Relatorio; atualizar: 
     localStorage.setItem(CHAVE_MESES, String(n))
   }
 
-  const mudarCondicao = (local: string, condicao: string) =>
-    atualizar((x) => ({ ...x, equipamentos: x.equipamentos.map((e) => (e.local === local ? { ...e, condicao } : e)) }))
+  const mudarCondicao = (local: string, condicao: string) => {
+    const e = r.equipamentos.find((x) => x.local === local)
+    atualizar((x) => ({ ...x, equipamentos: x.equipamentos.map((q) => (q.local === local ? { ...q, condicao } : q)) }))
+    if (e && e.condicao !== condicao) aoMudarCondicao?.(e, condicao)
+  }
 
   const remover = (local: string) => atualizar((x) => ({ ...x, equipamentos: x.equipamentos.filter((e) => e.local !== local) }))
 
@@ -151,7 +167,11 @@ export function PainelEquipamentos({ r, atualizar }: { r: Relatorio; atualizar: 
   }
 
   const nAnom = r.equipamentos.filter((e) => r.condicoesAnomalia.includes(e.condicao)).length
-  const lista = r.equipamentos.filter((e) => filtro === 'todos' || r.condicoesAnomalia.includes(e.condicao))
+  const nExec = r.equipamentos.filter((e) => e.executado).length
+  const nAnalisar = r.equipamentos.filter((e) => e.executado && !e.condicao).length
+  const lista = r.equipamentos.filter((e) =>
+    filtro === 'todos' ? true : filtro === 'executados' ? e.executado : r.condicoesAnomalia.includes(e.condicao),
+  )
 
   return (
     <div className="p-4">
@@ -159,12 +179,22 @@ export function PainelEquipamentos({ r, atualizar }: { r: Relatorio; atualizar: 
         <Abas
           ativa={filtro}
           mudar={setFiltro}
-          itens={[
-            ['todos', `Todos ${r.equipamentos.length}`],
-            ['anomalias', `Geram anomalia ${nAnom}`],
-          ]}
+          itens={
+            [
+              ...(temExecucao ? [['executados', `Executados ${nExec}`]] : []),
+              ['todos', `Todos ${r.equipamentos.length}`],
+              ['anomalias', `Geram anomalia ${nAnom}`],
+            ] as ['executados' | 'todos' | 'anomalias', string][]
+          }
         />
-        <p className="min-w-0 flex-1 text-xs text-cinza">Marque como Normal o que não precisa de página. A condição original da planilha fica guardada.</p>
+        <p className="min-w-0 flex-1 text-xs text-cinza">
+          {nAnalisar > 0 && (
+            <span className="mr-1 inline-flex items-center gap-1 rounded-full bg-sinal px-2 py-0.5 font-semibold text-preto">
+              {nAnalisar} a analisar
+            </span>
+          )}
+          Defina a condição depois da análise: ela é gravada na planilha de controle.
+        </p>
         <div className="passo-meses" role="group" aria-label="Meses no histórico">
           <button type="button" onClick={() => mudarMeses(-1)} disabled={nMeses <= 2} aria-label="Menos meses">
             −
@@ -203,7 +233,7 @@ export function PainelEquipamentos({ r, atualizar }: { r: Relatorio; atualizar: 
               <tr className="linha-viva acoes-no-hover border-b border-linha/70 align-middle">
                 <td className="py-2 pr-2 pl-3 whitespace-nowrap">
                   <span className="tag">{e.local}</span>
-                  {e.manual && <span className="ml-1.5 rounded-full bg-sinal-claro px-1.5 text-[11px]">manual</span>}
+                  {e.manual && <span className="ml-1.5 rounded-full bg-sinal px-1.5 text-[11px] font-semibold text-preto">manual</span>}
                 </td>
                 <td className="max-w-56 truncate py-2 pr-2 text-grafite" title={e.descricao}>
                   {e.descricao}
