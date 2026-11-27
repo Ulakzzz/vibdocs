@@ -11,6 +11,31 @@ export interface ArquivoBanco {
   tamanho: number
   modificado: number
   obter: () => Promise<File>
+  usina: string // 1ª pasta (Barreiro, Jeceaba, Mineração)
+  tipo: TipoBanco
+}
+
+/** principal = o banco da área; cópia = cópia de um notebook (…-MGS-LT-NOME, …-DESKTOP-…); demais = backup, modelo, desativado */
+export type TipoBanco = 'principal' | 'copia' | 'backup' | 'modelo' | 'desativado'
+
+export function tipoDoBanco(caminho: string, tamanho: number): TipoBanco {
+  const c = caminho.toUpperCase()
+  if (/(^|\/)BACKUP(\/|$)|BACKUP/.test(c)) return 'backup'
+  if (/DESATIVAD|EM CONSTRU/.test(c)) return 'desativado'
+  if (/MODELO|(^|\/)BASE\.MDB$|TEMPLATE/.test(c) || tamanho < 8e6) return 'modelo'
+  if (/-(MGS-?LT|MGST|DESKTOP|DELL|LT)-|-\d+\.(MDB|ACCDB)$/.test(c)) return 'copia'
+  return 'principal'
+}
+
+/** Bancos prováveis para uma TAG: a sigla da área (LAA, AJU, DWS…) aparece no caminho do banco. */
+export function bancosProvaveis(arquivos: ArquivoBanco[], tag: string, usina: string): ArquivoBanco[] {
+  const partes = tag.toUpperCase().split('-').filter((p) => /^[A-Z][A-Z0-9]{1,5}$/.test(p) && !['VS01', 'VM52'].includes(p))
+  return arquivos
+    .filter((a) => a.tipo === 'principal' && (!usina || a.usina === usina))
+    .map((a) => ({ a, n: partes.filter((p) => new RegExp(`(^|[^A-Z])${p}([^A-Z]|$)`).test(a.caminho.toUpperCase())).length }))
+    .filter((x) => x.n > 0)
+    .sort((x, y) => y.n - x.n)
+    .map((x) => x.a)
 }
 
 /** Lista os .mdb da pasta (com subpastas por usina/área). */
@@ -27,7 +52,16 @@ export async function listarBancos(raiz: FileSystemDirectoryHandle): Promise<Arq
     for (const a of arquivos)
       if (/\.(mdb|accdb)$/i.test(a.name)) {
         const f = await a.getFile()
-        out.push({ caminho: prefixo + a.name, nome: a.name, tamanho: f.size, modificado: f.lastModified, obter: () => a.getFile() })
+        const caminho = prefixo + a.name
+        out.push({
+          caminho,
+          nome: a.name,
+          tamanho: f.size,
+          modificado: f.lastModified,
+          obter: () => a.getFile(),
+          usina: caminho.split('/')[0],
+          tipo: tipoDoBanco(caminho, f.size),
+        })
       }
     if (nivel < 4) for (const p of pastas) await andar(await d.getDirectoryHandle(p), `${prefixo}${p}/`, nivel + 1)
   }

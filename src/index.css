@@ -2898,3 +2898,15 @@ fieldset.somente-leitura {
 .cartao-status small {
   color: var(--color-cinza);
 }
+.banco-arq.secundario {
+  opacity: 0.75;
+  border-style: dashed;
+}
+.banco-tipo {
+  margin-left: 6px;
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  background: var(--t-hover);
+}

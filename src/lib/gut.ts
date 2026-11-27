@@ -68,6 +68,9 @@ export function conclusaoDesejada(r: Relatorio, a: Anomalia, criterios?: Criteri
   return new Date(dataIdentificacao(r, a).getTime() + res.prazoDias * 86400000)
 }
 
+/** Prazo para enviar o relatório de um alarme, contado da data da coleta. */
+export const PRAZO_ALARME_DIAS = 1
+
 export const gutPadrao = (): Gut => ({ modo: '', g: 1, u: 1, t: 1, criticidade: 'A' })
 
 /** Data de identificação da anomalia: a data da coleta (dd/mm/aa ou dd/mm/aaaa) ou a expedição do relatório. */
@@ -86,7 +89,8 @@ export function lembretes(r: Relatorio, a: Anomalia, condicao: string, criterios
   const inicio = dataIdentificacao(r, a)
   const somar = (dias: number) => new Date(inicio.getTime() + dias * 86400000)
   const out: { tipo: 'enviar' | 'reanalisar'; quando: Date; texto: string }[] = []
-  if (condicao === '4') out.push({ tipo: 'enviar', quando: somar(1), texto: 'Alarme: enviar o relatório ao cliente (prazo curto desde a identificação)' })
+  // alarme: prazo máximo de 24 h desde a coleta em que foi identificado (regra do contrato)
+  if (condicao === '4') out.push({ tipo: 'enviar', quando: somar(PRAZO_ALARME_DIAS), texto: 'Alarme: enviar o relatório em até 24 h da coleta' })
   if (a.gut?.modo) {
     const res = calcularGut(a.gut, criterios)
     if (res.prazoDias) out.push({ tipo: 'reanalisar', quando: somar(res.prazoDias), texto: `Nova análise / vencimento do laudo (GUT ${res.valor.toLocaleString('pt-BR')}, ${res.prazoDias} dias)` })

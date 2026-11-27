@@ -76,12 +76,20 @@ export async function salvarEmitido(raiz: FileSystemDirectoryHandle, r: Relatori
   return [...partes, nome].join('\\')
 }
 
-/** Próxima sequência do mês na usina = quantidade de áreas com rascunho no mês + 1. */
-export async function proximaSequencia(raiz: FileSystemDirectoryHandle, usina: string, mesRef: string) {
+/** Próxima sequência do mês = áreas com rascunho no mês + 1 (na usina; em Jeceaba, no mesmo setor UTI/UPS/DWS). */
+export async function proximaSequencia(raiz: FileSystemDirectoryHandle, usina: string, mesRef: string, setor?: string) {
   try {
     const [aaaa, mm] = mesRef.split('-')
     const dir = await subpasta(raiz, [PASTA_VIBDOCS, 'rascunhos', usina, aaaa, mm])
-    return (await listar(dir)).pastas.length + 1
+    const { pastas } = await listar(dir)
+    if (!setor) return pastas.length + 1
+    let n = 0
+    for (const p of pastas) {
+      const t = await lerTexto(await dir.getDirectoryHandle(p), 'relatorio.json')
+      const r = t ? (JSON.parse(t) as Relatorio) : undefined
+      if ((r?.setor ?? '') === setor) n++
+    }
+    return n + 1
   } catch {
     return 1
   }

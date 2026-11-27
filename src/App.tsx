@@ -41,7 +41,7 @@ import { escolherPasta, esquecerPasta, navegadorSuportado, pastaLembrada, recone
 import { guardarModelo, obterModelo, visualDoModelo, type VisualModelo } from './lib/modelo'
 import { rascunhosRecentes } from './lib/rascunho'
 import { lerDaPasta, lerLocal, maisRecente, proximaSequencia, salvarEmitido, salvarLocal, salvarNaPasta } from './lib/rascunho'
-import { anomaliaDe, aplicarHistorico, artDaUsina, paginaPreenchida, type PerfilTecnico, equipamentosAnomalia, hojeISO, mesmoHistorico, normalizar, novoRelatorio, STATUS_RELATORIO, type StatusRelatorio, type EquipRel, type ImagemRef, type Relatorio, type Slot } from './lib/relatorio'
+import { anomaliaDe, aplicarHistorico, artDaUsina, paginaPreenchida, type PerfilTecnico, equipamentosAnomalia, hojeISO, mesmoHistorico, normalizar, novoRelatorio, regrasContrato, setorDaTag, STATUS_RELATORIO, type StatusRelatorio, type EquipRel, type ImagemRef, type Relatorio, type Slot } from './lib/relatorio'
 import { guardarImagem } from './lib/imagens'
 import { gravarLembretes } from './lib/lembretesArquivo'
 import { AjustarLargura, Previa } from './report/Previa'
@@ -373,7 +373,9 @@ export default function App() {
       const pasta = raiz ? await lerDaPasta(raiz, usina, mesRef, sigla) : undefined
       let r = maisRecente(local, pasta)
       if (!r) {
-        const seq = raiz ? await proximaSequencia(raiz, usina, mesRef) : 1
+        const setor = usina === 'Jeceaba' ? (linhas.map((l) => setorDaTag(l.local)).find((s, _, a) => s && a.length) ?? '') : ''
+        const setorDaSigla = linhas.filter((l) => siglaArea(l.local) === sigla).map((l) => setorDaTag(l.local)).find(Boolean) ?? setor
+        const seq = raiz ? await proximaSequencia(raiz, usina, mesRef, regrasContrato().sequenciaPorSetor?.includes(usina) ? setorDaSigla : undefined) : 1
         r = novoRelatorio({ usina, sigla, mesReferencia: mesRef, sequencia: seq, analista, perfil: perfilTecnico, linhas, art: artDaUsina(usina) })
       } else {
         // Rascunho salvo antes de existirem os campos "executado" e "plano": completa pela planilha do mês.
@@ -385,6 +387,11 @@ export default function App() {
             if (!l) return e
             return { ...e, executado: e.executado ?? l.executado, plano: e.plano ?? l.plano, celula: e.celula ?? l.celula }
           }),
+        }
+        // rascunho anterior ao código por setor (Jeceaba): calcula o setor pelas TAGs
+        if (r.setor === undefined) {
+          const setores = r.equipamentos.map((e) => setorDaTag(e.local)).filter(Boolean)
+          r = { ...r, setor: setores[0] ?? '' }
         }
       }
       if (cancelado) return
@@ -643,7 +650,7 @@ export default function App() {
   useEffect(() => {
     if (!usinaRel) return
     let vivo = true
-    obterModelo(raiz, usinaRel)
+    obterModelo(raiz, usinaRel, rel?.contrato || 'Vallourec')
       .then((m) => (m ? visualDoModelo(m) : undefined))
       .then((v) => vivo && setVisual(v))
       .catch(() => vivo && setVisual(undefined))
@@ -671,7 +678,7 @@ export default function App() {
   const exportarWord = (semModelo = false) =>
     executar(async () => {
       if (!rel) return
-      if (!semModelo && !(await obterModelo(raiz, rel.usina))) {
+      if (!semModelo && !(await obterModelo(raiz, rel.usina, rel.contrato || 'Vallourec'))) {
         setPedirModelo(true)
         return
       }
@@ -680,7 +687,7 @@ export default function App() {
       setAviso('')
       try {
         const { gerarWord, nomeArquivo } = await import('./lib/word') // carregado só quando usado
-        const modelo = await obterModelo(raiz, rel.usina)
+        const modelo = await obterModelo(raiz, rel.usina, rel.contrato || 'Vallourec')
         const blob = modelo ? await (await import('./lib/modeloWord')).gerarWordDoModelo(rel, modelo.dados) : await gerarWord(rel)
         const nome = nomeArquivo(rel, 'docx')
         baixar(blob, nome)
@@ -979,7 +986,7 @@ export default function App() {
 
         {tela === 'cadastros' ? (
           <main className="min-w-0 flex-1 overflow-auto">
-            <Cadastros papel={usuario?.papel ?? 'leitor'} raiz={raiz} linhas={linhas} />
+            <Cadastros papel={usuario?.papel ?? 'leitor'} raiz={raiz} linhas={linhas} emailUsuario={usuario?.email ?? ''} />
           </main>
         ) : tela === 'relatorios' ? (
           <main className="min-w-0 flex-1 overflow-auto">
@@ -987,7 +994,7 @@ export default function App() {
           </main>
         ) : tela === 'banco' ? (
           <main className="min-w-0 flex-1 overflow-auto">
-            <BancoVibracao raiz={raiz} linhas={linhas} usuario={usuario?.nome ?? ''} foco={focoBanco} />
+            <BancoVibracao raiz={raiz} linhas={linhas} usuario={usuario?.nome ?? ''} foco={focoBanco} usina={usina} />
           </main>
         ) : tela === 'historico' ? (
           <main className="min-w-0 flex-1 overflow-auto">

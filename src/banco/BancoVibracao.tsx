@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { enviarAoRelatorio, graficoParaImagem } from './exportarGrafico'
 import type { LinhaControle } from '../lib/controle'
-import { BancoAberto, listarBancos, PASTA_BANCOS, type ArquivoBanco } from '../lib/omnitrend/cliente'
+import { BancoAberto, bancosProvaveis, listarBancos, PASTA_BANCOS, type ArquivoBanco } from '../lib/omnitrend/cliente'
 import type { Espectro, NoOT, TarefaOT } from '../lib/omnitrend/ler'
 import { gravarVinculo, gravarVinculos, lerVinculos, sugerir, vincularAutomatico, type Vinculo, type Vinculos } from '../lib/omnitrend/vinculos'
 import { avisar } from '../ui/Avisos'
@@ -49,13 +49,17 @@ export function BancoVibracao({
   linhas,
   usuario,
   foco,
+  usina = '',
 }: {
   raiz?: FileSystemDirectoryHandle
   linhas: LinhaControle[]
   usuario: string
   foco?: FocoBanco
+  usina?: string
 }) {
   const [arquivos, setArquivos] = useState<ArquivoBanco[]>()
+  const [usinaBancos, setUsinaBancos] = useState(usina || 'Barreiro')
+  const [todosBancos, setTodosBancos] = useState(false)
   const [banco, setBanco] = useState<BancoAberto | undefined>(abertoGlobal?.banco)
   const [chave, setChave] = useState(abertoGlobal?.chave ?? '')
   const [abrindo, setAbrindo] = useState('')
@@ -194,8 +198,23 @@ export function BancoVibracao({
         </label>
       </header>
 
-      {/* bancos da pasta */}
-      <section className="mt-6 flex flex-wrap gap-2">
+      {/* bancos da pasta: por usina, o banco de cada área primeiro (cópias de notebook, backups e modelos ficam guardados) */}
+      {arquivos && arquivos.length > 0 && (
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <Seletor
+            classe="seletor-campo"
+            rotulo="Usina dos bancos"
+            valor={usinaBancos}
+            mudar={setUsinaBancos}
+            opcoes={[...new Set(arquivos.map((a) => a.usina))].map((u) => ({ valor: u, rotulo: u, extra: String(arquivos.filter((a) => a.usina === u && a.tipo === 'principal').length) }))}
+          />
+          <label className="flex items-center gap-2 text-xs text-cinza">
+            <input type="checkbox" checked={todosBancos} onChange={(e) => setTodosBancos(e.target.checked)} />
+            mostrar também cópias de notebooks, backups e modelos ({arquivos.filter((a) => a.usina === usinaBancos && a.tipo !== 'principal').length})
+          </label>
+        </div>
+      )}
+      <section className="mt-3 flex flex-wrap gap-2">
         {arquivos === undefined ? (
           <span className="text-sm text-cinza">Procurando bancos…</span>
         ) : arquivos.length === 0 ? (
@@ -205,9 +224,14 @@ export function BancoVibracao({
               : 'Sem a pasta do SharePoint conectada: use “Abrir arquivo .mdb”.'}
           </span>
         ) : (
-          arquivos.map((a) => (
-            <button key={a.caminho} className={`banco-arq ${chave === a.caminho ? 'on' : ''}`} onClick={() => void abrirDaPasta(a)} disabled={!!abrindo}>
-              <b>{a.caminho.replace(/\.(mdb|accdb)$/i, '')}</b>
+          arquivos
+            .filter((a) => a.usina === usinaBancos && (todosBancos || a.tipo === 'principal'))
+            .map((a) => (
+            <button key={a.caminho} className={`banco-arq ${chave === a.caminho ? 'on' : ''} ${a.tipo !== 'principal' ? 'secundario' : ''}`} onClick={() => void abrirDaPasta(a)} disabled={!!abrindo}>
+              <b>
+                {a.caminho.split('/').slice(1).join(' › ').replace(/\.(mdb|accdb)$/i, '')}
+                {a.tipo !== 'principal' && <span className="banco-tipo">{({ copia: 'cópia', backup: 'backup', modelo: 'modelo', desativado: 'desativado' } as Record<string, string>)[a.tipo]}</span>}
+              </b>
               <small>
                 {tam(a.tamanho)} · atualizado {new Date(a.modificado).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
               </small>
@@ -215,6 +239,17 @@ export function BancoVibracao({
           ))
         )}
       </section>
+      {/* TAG vinda do relatório sem vínculo e sem banco aberto: sugere os bancos da área */}
+      {vincularTag && !banco && arquivos && (
+        <section className="banco-pendente mt-4">
+          Para vincular <b className="tag">{vincularTag.tag}</b>, abra o banco da área:
+          {bancosProvaveis(arquivos, vincularTag.tag, usina).slice(0, 4).map((a) => (
+            <button key={a.caminho} className="bt bt-sec bt-mini" onClick={() => void abrirDaPasta(a)}>
+              {a.caminho.split('/').slice(1, -1).join(' › ') || a.nome}
+            </button>
+          ))}
+        </section>
+      )}
 
       {abrindo && <Carregando texto={abrindo} />}
       {erro && <p className="mt-4 rounded-[10px] bg-red-50 p-3 text-sm text-red-800">{erro}</p>}

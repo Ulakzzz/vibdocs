@@ -17,13 +17,24 @@ export interface LembreteArquivo {
   quando: string // AAAA-MM-DD
   texto: string
   responsavel: string
-  email: string
+  email: string // quem recebe o aviso no Teams (no modo de teste, o e-mail de teste)
+  emailReal?: string // no modo de teste: quem receberia de verdade
 }
+
+/** Avisos (Cadastros › Avisos): em modo de teste todos os avisos vão só para o e-mail de teste. */
+export interface ConfigAvisos {
+  modoTeste: boolean
+  emailTeste: string
+}
+export const configAvisos = (): ConfigAvisos => ({ modoTeste: true, emailTeste: '', ...lerConfig<Partial<ConfigAvisos>>('avisos') })
 
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 export function lembretesDoRelatorio(r: Relatorio): LembreteArquivo[] {
   const criterios = lerConfig<CriteriosGut>('gut-criterios')
+  const av = configAvisos()
+  const real = r.contato?.email ?? ''
+  const destino = av.modoTeste ? av.emailTeste : real
   return equipamentosAnomalia(r).flatMap((e) => {
     const a = r.anomalias[e.local]
     if (!a) return []
@@ -37,7 +48,8 @@ export function lembretesDoRelatorio(r: Relatorio): LembreteArquivo[] {
       quando: iso(l.quando),
       texto: l.texto,
       responsavel: r.equipe.analise,
-      email: r.contato?.email ?? '',
+      email: destino,
+      ...(av.modoTeste ? { emailReal: real } : {}),
     }))
   })
 }
@@ -49,7 +61,12 @@ export async function gravarLembretes(raiz: FileSystemDirectoryHandle, r: Relato
   const nome = `${r.usina}-${r.mesReferencia}-${r.sigla || 'AVULSO'}.json`.replace(/[\\/:*?"<>|\s]/g, '_')
   // sem lembretes e sem arquivo antigo: não cria nada
   if (!lista.length && !(await listar(dir)).arquivos.some((a) => a.name === nome)) return
-  await gravarTexto(dir, nome, JSON.stringify({ atualizado: new Date().toISOString(), relatorio: r.codigo, lembretes: lista }, null, 1))
+  const av = configAvisos()
+  await gravarTexto(
+    dir,
+    nome,
+    JSON.stringify({ atualizado: new Date().toISOString(), relatorio: r.codigo, modoTeste: av.modoTeste, lembretes: av.modoTeste && !av.emailTeste ? [] : lista }, null, 1),
+  )
 }
 
 /** Arquivo de calendário (.ics) com os lembretes: um evento de dia inteiro, com aviso na véspera. */

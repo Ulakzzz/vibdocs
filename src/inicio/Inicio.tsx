@@ -391,7 +391,7 @@ export function Inicio(p: {
             <article className="ideia">
               <h3>Avisos no celular</h3>
               <p>
-                Lembrar quem fez o relatório de <b>enviá-lo</b> (alarme tem prazo curto desde a identificação) e de fazer uma{' '}
+                Lembrar quem fez o relatório de <b>enviá-lo</b> (alarme: em até 24 h da coleta) e de fazer uma{' '}
                 <b>nova análise</b> na data que o GUT indica (7, 15, 30 ou 60 dias). O VibDocs já grava os lembretes de cada relatório em{' '}
                 <b>VibDocs/lembretes</b> (um arquivo por relatório); falta só o fluxo do Power Automate que lê a pasta todo dia e avisa no
                 Teams.

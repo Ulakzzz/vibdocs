@@ -62,7 +62,7 @@ export function useConfig<T>(nome: string): T | undefined {
   return valores.get(nome) as T | undefined
 }
 
-export const CONFIGS = ['textos-padrao', 'gut-criterios', 'status-nomes', 'textos-relatorio', 'cadastro-equipamentos'] as const
+export const CONFIGS = ['textos-padrao', 'gut-criterios', 'status-nomes', 'textos-relatorio', 'cadastro-equipamentos', 'avisos', 'contratos'] as const
 
 export async function carregarTodas(raiz?: FileSystemDirectoryHandle) {
   definirRaizConfig(raiz)

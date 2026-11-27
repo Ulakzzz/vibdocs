@@ -10,18 +10,21 @@ import { TEXTOS_PADRAO, type TextoPadrao } from '../lib/textos'
 import { USINAS_RELATORIO, novoId, type NomesStatus } from '../lib/relatorio'
 import { Abas, btn, btnMini, btnPri, Campo, Texto, TextoLongo } from '../editor/campos'
 import { avisar } from '../ui/Avisos'
+import type { ConfigAvisos } from '../lib/lembretesArquivo'
 import { lerVinculos, type Vinculos } from '../lib/omnitrend/vinculos'
 
-type Aba = 'gut' | 'textos' | 'status' | 'relatorio' | 'equipamentos'
+type Aba = 'gut' | 'textos' | 'status' | 'relatorio' | 'equipamentos' | 'avisos'
 
 export function Cadastros({
   papel,
   raiz,
   linhas,
+  emailUsuario = '',
 }: {
   papel: string
   raiz?: FileSystemDirectoryHandle
   linhas: LinhaControle[]
+  emailUsuario?: string
 }) {
   const [aba, setAba] = useState<Aba>('gut')
   const admin = papel === 'admin'
@@ -46,6 +49,7 @@ export function Cadastros({
             ['status', 'Nomes do farol'],
             ['relatorio', 'Textos do relatório'],
             ['equipamentos', 'Equipamentos'],
+            ['avisos', 'Avisos no Teams'],
           ]}
         />
       </div>
@@ -55,8 +59,41 @@ export function Cadastros({
         {aba === 'status' && <TabStatus pode={admin} />}
         {aba === 'relatorio' && <TabRelatorio pode={editor} />}
         {aba === 'equipamentos' && <TabEquipamentos pode={admin} raiz={raiz} linhas={linhas} />}
+        {aba === 'avisos' && <TabAvisos pode={admin} emailUsuario={emailUsuario} />}
       </div>
     </div>
+  )
+}
+
+// ---------- avisos no Teams ----------
+function TabAvisos({ pode, emailUsuario }: { pode: boolean; emailUsuario: string }) {
+  const salvo = useConfig<ConfigAvisos>('avisos')
+  const [c, setC] = useState<ConfigAvisos>({ modoTeste: true, emailTeste: emailUsuario, ...salvo })
+  useEffect(() => setC({ modoTeste: true, emailTeste: emailUsuario, ...salvo }), [salvo, emailUsuario])
+  return (
+    <Bloqueado pode={pode}>
+      <div className="cartao-inicio max-w-2xl space-y-4">
+        <p className="text-sm text-cinza">
+          O VibDocs grava os lembretes de cada relatório em VibDocs/lembretes. O fluxo do Power Automate lê a pasta todo dia e manda a
+          mensagem no Teams para o e-mail de cada lembrete.
+        </p>
+        <label className="flex items-center gap-2 text-sm font-semibold">
+          <input type="checkbox" checked={c.modoTeste} onChange={(e) => setC({ ...c, modoTeste: e.target.checked })} />
+          Modo de teste: todos os avisos vão só para o e-mail abaixo
+        </label>
+        <Campo rotulo="E-mail de teste" dica="Enquanto o modo de teste estiver ligado, ninguém mais recebe. Sem e-mail, nenhum aviso é gerado.">
+          <Texto tipo="email" valor={c.emailTeste} mudar={(v) => setC({ ...c, emailTeste: v })} placeholder="nome@pruftechnik.com.br" />
+        </Campo>
+        {!c.modoTeste && (
+          <p className="rounded-[10px] border border-dashed border-sinal px-3 py-2 text-xs">
+            Modo real: cada aviso vai para o e-mail do técnico da análise do relatório (o do cabeçalho).
+          </p>
+        )}
+        <button className={btnPri} onClick={() => void salvarConfig('avisos', c).then(() => avisar('Configuração dos avisos salva.', 'ok'))}>
+          Salvar
+        </button>
+      </div>
+    </Bloqueado>
   )
 }
 

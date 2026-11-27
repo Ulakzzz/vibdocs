@@ -24,9 +24,10 @@ async function daPasta(raiz: FileSystemDirectoryHandle, usina?: string): Promise
   }
 }
 
-/** Modelo a usar no relatório: o da usina, senão o geral; pasta antes do navegador. */
-export async function obterModelo(raiz: FileSystemDirectoryHandle | undefined, usina: string): Promise<Modelo | undefined> {
-  for (const u of [usina, undefined]) {
+/** Modelo a usar no relatório, do mais específico ao geral: contrato+usina, contrato, usina, geral (pasta antes do navegador).
+ *  Outros contratos (clientes) podem ter o próprio modelo: modelo-relatorio-<Contrato>.docx ou -<Contrato>-<Usina>.docx. */
+export async function obterModelo(raiz: FileSystemDirectoryHandle | undefined, usina: string, contrato = 'Vallourec'): Promise<Modelo | undefined> {
+  for (const u of [`${contrato}-${usina}`, contrato, usina, undefined]) {
     const m = (raiz && (await daPasta(raiz, u))) || (await get<Modelo>(chave(u)))
     if (m) return m.origem === 'pasta' ? m : { ...m, origem: 'navegador' }
   }

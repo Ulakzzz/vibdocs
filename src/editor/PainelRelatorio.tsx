@@ -146,7 +146,7 @@ export function PainelRelatorio({
                 className={btnMini}
                 title="Voltar ao código automático"
                 onClick={() =>
-                  atualizar((x) => ({ ...x, codigoManual: false, codigo: gerarCodigo(x.usina, x.sigla, x.mesReferencia, x.sequencia) }))
+                  atualizar((x) => ({ ...x, codigoManual: false, codigo: gerarCodigo(x.usina, x.sigla, x.mesReferencia, x.sequencia, x.setor, x.contrato) }))
                 }
               >
                 auto
@@ -159,6 +159,9 @@ export function PainelRelatorio({
         </Campo>
         <Campo rotulo="Cidade">
           <Texto valor={r.cidade} mudar={(v) => set('cidade', v)} />
+        </Campo>
+        <Campo rotulo="Contrato (cliente)" dica="Define o padrão do código e o modelo do Word. Vazio = Vallourec.">
+          <Texto valor={r.contrato ?? ''} placeholder="Vallourec" mudar={(v) => set('contrato', v || undefined)} />
         </Campo>
         <Tecnico
           rotulo="Técnico da coleta"
@@ -249,7 +252,7 @@ export function PainelRelatorio({
         </div>
       )}
 
-      <ModeloWord raiz={raiz} usina={r.usina} />
+      <ModeloWord raiz={raiz} usina={r.usina} contrato={r.contrato || 'Vallourec'} />
 
       <div className="rounded-[14px] bg-nevoa p-3 text-xs leading-relaxed">
         <b>Histórico: </b>

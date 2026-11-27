@@ -113,7 +113,11 @@ export interface Relatorio {
   mesReferencia: string // AAAA-MM
   sequencia: number
   codigo: string
-  codigoManual: boolean // true = o técnico editou o código; não recalcular
+  codigoManual: boolean
+  /** cliente/contrato (regras de código e modelo do Word); vazio = Vallourec */
+  contrato?: string
+  /** setor da área (Jeceaba: UTI, UPS, DWS), usado no código */
+  setor?: string // true = o técnico editou o código; não recalcular
   dataExpedicao: string // AAAA-MM-DD
   cidade: string
   equipe: {
@@ -164,21 +168,45 @@ export const TODAS_CONDICOES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10
 export const PADRAO_QUADRO = TODAS_CONDICOES.filter((c) => c !== 'X' && c !== 'R')
 export const PADRAO_ANOMALIA = ['2', '3', '4']
 
-const CONTRATO: Record<string, { prefixo: (s: string) => string; cidade: string }> = {
-  Mineração: { prefixo: () => 'VMN-446M', cidade: 'Brumadinho' },
-  Barreiro: { prefixo: (s) => `${s}-446V`, cidade: 'Belo Horizonte' },
-  Jeceaba: { prefixo: (s) => `${s}-446V`, cidade: 'Jeceaba' }, // formato de Jeceaba ainda a confirmar
-  Florestal: { prefixo: (s) => `${s}-446V`, cidade: '' },
+/** Regras de um contrato (cliente): padrão do código e cidade por usina. "*" vale para as usinas sem regra própria.
+ *  Marcadores do padrão: {SIGLA} (área), {SETOR} (UTI/UPS/DWS em Jeceaba), {AAMM}, {NN} (sequência no mês). */
+export interface RegrasContrato {
+  codigo: Record<string, string>
+  cidade: Record<string, string>
+  /** a sequência conta por setor (Jeceaba) em vez de por usina */
+  sequenciaPorSetor?: string[]
+}
+export const CONTRATO_PADRAO = 'Vallourec'
+const REGRAS_VALLOUREC: RegrasContrato = {
+  codigo: { Mineração: 'VMN-446M{AAMM}{NN}', Barreiro: '{SIGLA}-446V{AAMM}{NN}', Jeceaba: '{SETOR}{AAMM}{NN}', '*': '{SIGLA}-446V{AAMM}{NN}' },
+  cidade: { Mineração: 'Brumadinho', Barreiro: 'Belo Horizonte', Jeceaba: 'Jeceaba', Florestal: '' },
+  sequenciaPorSetor: ['Jeceaba'],
+}
+/** Regras do contrato: as de Cadastros (config "contratos") ou as da Vallourec. */
+export function regrasContrato(contrato = CONTRATO_PADRAO): RegrasContrato {
+  const cfg = lerConfig<Record<string, RegrasContrato>>('contratos')?.[contrato]
+  return cfg ?? REGRAS_VALLOUREC
 }
 
-/** {SIGLA}-446V{AAMM}{NN}; Mineração usa VMN-446M. NN = sequência da usina no mês. */
-export function gerarCodigo(usina: string, sigla: string, mesRef: string, sequencia: number) {
+/** Setor da TAG (Jeceaba: VS01-DWS-AJU-… → DWS; UTI/UPS idem). */
+export const setorDaTag = (tag: string) => {
+  const p = tag.toUpperCase().split('-')
+  return p[0] === 'VS01' || p[0] === 'VM52' ? (p[1] ?? '') : ''
+}
+
+/** Código do relatório pelo padrão do contrato (ex.: LAA-446V261101, VMN-446M261101, DWS261102). */
+export function gerarCodigo(usina: string, sigla: string, mesRef: string, sequencia: number, setor = '', contrato = CONTRATO_PADRAO) {
   const [aaaa, mm] = mesRef.split('-')
-  const pre = CONTRATO[usina]?.prefixo(sigla || 'XXX') ?? `${sigla}-446V`
-  return `${pre}${aaaa.slice(2)}${mm}${String(sequencia).padStart(2, '0')}`
+  const r = regrasContrato(contrato)
+  const padrao = r.codigo[usina] ?? r.codigo['*'] ?? '{SIGLA}-446V{AAMM}{NN}'
+  return padrao
+    .replace('{SIGLA}', sigla || 'XXX')
+    .replace('{SETOR}', setor || sigla || 'XXX')
+    .replace('{AAMM}', `${aaaa.slice(2)}${mm}`)
+    .replace('{NN}', String(sequencia).padStart(2, '0'))
 }
 
-export const cidadePadrao = (usina: string) => CONTRATO[usina]?.cidade ?? ''
+export const cidadePadrao = (usina: string, contrato = CONTRATO_PADRAO) => regrasContrato(contrato).cidade[usina] ?? ''
 
 const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 
@@ -248,6 +276,9 @@ export function novoRelatorio(p: {
       executado: l.executado,
       celula: l.celula,
     }))
+  // setor da área (Jeceaba): o mais comum nas TAGs da área
+  const setores = equipamentos.map((e) => setorDaTag(e.local)).filter(Boolean)
+  const setor = setores.sort((a, b) => setores.filter((x) => x === b).length - setores.filter((x) => x === a).length)[0] ?? ''
   return {
     versao: 2,
     avulso: !!p.avulso,
@@ -256,7 +287,9 @@ export function novoRelatorio(p: {
     areaTitulo: p.sigla,
     mesReferencia: p.mesReferencia,
     sequencia: p.sequencia,
-    codigo: gerarCodigo(p.usina, p.sigla, p.mesReferencia, p.sequencia),
+    contrato: CONTRATO_PADRAO,
+    setor,
+    codigo: gerarCodigo(p.usina, p.sigla, p.mesReferencia, p.sequencia, setor),
     codigoManual: false,
     dataExpedicao: hojeISO(),
     cidade: cidadePadrao(p.usina),
@@ -355,7 +388,7 @@ export const reincidenciaFinal = (r: Relatorio, e: EquipRel, a: Anomalia) => a.r
 
 /** Recalcula o que é automático, respeitando o que o técnico editou. */
 export function normalizar(r: Relatorio): Relatorio {
-  return r.codigoManual ? r : { ...r, codigo: gerarCodigo(r.usina, r.sigla, r.mesReferencia, r.sequencia) }
+  return r.codigoManual ? r : { ...r, codigo: gerarCodigo(r.usina, r.sigla, r.mesReferencia, r.sequencia, r.setor, r.contrato) }
 }
 
 // ---------- rótulos que mudam por usina (conforme os relatórios emitidos) ----------
